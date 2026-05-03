@@ -59,6 +59,7 @@ import {
   GlobalQueue,
   insertSubs,
   projectionWriteActive,
+  queuePendingNode,
   runInTransition,
   schedule,
   shouldReadStashedOptimisticValue,
@@ -149,7 +150,7 @@ export function recompute(el: Computed<any>, create: boolean = false): void {
     el._inFlight = null;
     // Tracked effects run after finalizePureQueue, so dispose immediately instead of deferring
     if (el._transition || isEffect === EFFECT_TRACKED) disposeChildren(el);
-    else {
+    else if (el._firstChild !== null || el._disposal !== null) {
       markDisposal(el);
       el._pendingDisposal = el._disposal;
       el._pendingFirstChild = el._firstChild;
@@ -157,7 +158,7 @@ export function recompute(el: Computed<any>, create: boolean = false): void {
       el._firstChild = null;
       el._childCount = 0;
       if (__DEV__) clearSignals(el);
-    }
+    } else if (__DEV__) clearSignals(el);
   }
 
   let isOptimisticDirty = !!(el._flags & REACTIVE_OPTIMISTIC_DIRTY);
@@ -210,12 +211,17 @@ export function recompute(el: Computed<any>, create: boolean = false): void {
     // iteration drive updates.
     const prevInFlight = el._inFlight;
     const fnResult = el._fn(value);
-    value = el._inFlight !== prevInFlight ? fnResult : handleAsync(el, fnResult);
+    const isAsyncResult = typeof fnResult === "object" && fnResult !== null;
+    const inFlightChanged = el._inFlight !== prevInFlight;
+    value = inFlightChanged || !isAsyncResult ? fnResult : handleAsync(el, fnResult);
+    if (!inFlightChanged && !isAsyncResult) el._inFlight = null;
     clearStatus(el, create);
-    const resolvedLane = resolveLane(el);
-    if (resolvedLane) {
-      resolvedLane._pendingAsync.delete(el);
-      updatePendingSignal(resolvedLane._source);
+    if (el._optimisticLane) {
+      const resolvedLane = resolveLane(el);
+      if (resolvedLane) {
+        resolvedLane._pendingAsync.delete(el);
+        updatePendingSignal(resolvedLane._source);
+      }
     }
   } catch (e) {
     // Track pending async in the lane (not the lane's source — it creates the lane
@@ -288,10 +294,16 @@ export function recompute(el: Computed<any>, create: boolean = false): void {
     }
   }
   currentOptimisticLane = prevLane;
-  (!create || el._statusFlags & STATUS_PENDING) &&
+  const needsPendingCommit =
+    el._pendingValue !== NOT_PENDING ||
+    el._pendingFirstChild !== null ||
+    el._pendingDisposal !== null ||
+    !!(el._statusFlags & (STATUS_PENDING | STATUS_UNINITIALIZED));
+  needsPendingCommit &&
+    (!create || el._statusFlags & STATUS_PENDING) &&
     !el._transition &&
     !(activeTransition && hasOverride) &&
-    globalQueue._pendingNodes.push(el);
+    queuePendingNode(el);
   el._transition &&
     isEffect &&
     activeTransition !== el._transition &&
@@ -603,6 +615,20 @@ export function read<T>(el: Signal<T> | Computed<T>): T {
   }
   const owner = (el as FirewallSignal<any>)._firewall || el;
 
+  if (
+    !computed._fn &&
+    owner === el &&
+    el._overrideValue === undefined &&
+    el._snapshotValue === undefined &&
+    activeTransition === null &&
+    currentOptimisticLane === null &&
+    !snapshotCaptureActive &&
+    (!__DEV__ || !strictRead)
+  ) {
+    if (c && tracking) link(el, c as Computed<any>);
+    return (!c || el._pendingValue === NOT_PENDING ? el._value : el._pendingValue) as T;
+  }
+
   if (__DEV__ && strictRead && owner._statusFlags & STATUS_PENDING) {
     const message =
       `[PENDING_ASYNC_UNTRACKED_READ] Reading a pending async value directly in ${strictRead}. ` +
@@ -829,12 +855,12 @@ export function setSignal<T>(el: Signal<T> | Computed<T>, v: T | ((prev: T) => T
 
     el._overrideValue = v;
   } else {
-    if (el._pendingValue === NOT_PENDING) globalQueue._pendingNodes.push(el);
+    if (el._pendingValue === NOT_PENDING) queuePendingNode(el);
     el._pendingValue = v;
   }
 
   // Update pending signal if it exists (for isPending reactivity)
-  updatePendingSignal(el);
+  if (el._pendingSignal) updatePendingSignal(el);
 
   // Also write to latest value computed if it exists (for latest())
   if (el._latestValueComputed) {

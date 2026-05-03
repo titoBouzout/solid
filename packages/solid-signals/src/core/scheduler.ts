@@ -45,6 +45,7 @@ export const zombieQueue: Heap = {
 export let clock = 0;
 export let activeTransition: Transition | null = null;
 let scheduled = false;
+let syncDepth = 0;
 export let projectionWriteActive = false;
 let inTrackedQueueCallback = false;
 
@@ -62,6 +63,17 @@ const transientStoreNodes = new Set<Signal<any>>();
 
 export function registerTransientStoreNode(node: Signal<any>): void {
   transientStoreNodes.add(node);
+}
+
+function canUseSimpleSyncFlush(queue: GlobalQueue): boolean {
+  return (
+    transitions.size === 0 &&
+    activeLanes.size === 0 &&
+    queue._children.length === 0 &&
+    queue._optimisticNodes.length === 0 &&
+    queue._optimisticStores.size === 0 &&
+    transientStoreNodes.size === 0
+  );
 }
 
 function sweepTransientStoreNodes(): void {
@@ -208,7 +220,7 @@ function cleanupCompletedLanes(completingTransition: Transition | null): void {
 export function schedule() {
   if (scheduled) return;
   scheduled = true;
-  if (!globalQueue._running && !projectionWriteActive) queueMicrotask(flush);
+  if (!syncDepth && !globalQueue._running && !projectionWriteActive) queueMicrotask(flush);
 }
 
 export interface IQueue {
@@ -290,6 +302,7 @@ export class Queue implements IQueue {
 
 export class GlobalQueue extends Queue {
   _running: boolean = false;
+  _pendingNode: Signal<any> | null = null;
   _pendingNodes: Signal<any>[] = [];
   _optimisticNodes: OptimisticNode[] = [];
   _optimisticStores: Set<any> = new Set();
@@ -306,6 +319,7 @@ export class GlobalQueue extends Queue {
         if (!isComplete) {
           const stashedTransition = activeTransition!;
           runHeap(zombieQueue, GlobalQueue._update);
+          this._pendingNode = null;
           this._pendingNodes = [];
           this._optimisticNodes = [];
           this._optimisticStores = new Set();
@@ -348,16 +362,24 @@ export class GlobalQueue extends Queue {
         reassignPendingTransition(this._pendingNodes);
         finalizePureQueue(completingTransition);
       } else {
-        if (transitions.size) runHeap(zombieQueue, GlobalQueue._update);
-        finalizePureQueue();
+        if (canUseSimpleSyncFlush(this)) {
+          commitPendingNodes();
+          if (dirtyQueue._max >= dirtyQueue._min) {
+            runHeap(dirtyQueue, GlobalQueue._update);
+            commitPendingNodes();
+          }
+        } else {
+          if (transitions.size) runHeap(zombieQueue, GlobalQueue._update);
+          finalizePureQueue();
+        }
       }
       clock++;
       // Check if finalization added items to the heap (from optimistic reversion)
       scheduled = dirtyQueue._max >= dirtyQueue._min;
       // Run lane effects first (for ready lanes), then regular effects
-      runLaneEffects(EFFECT_RENDER);
+      activeLanes.size && runLaneEffects(EFFECT_RENDER);
       this.run(EFFECT_RENDER);
-      runLaneEffects(EFFECT_USER);
+      activeLanes.size && runLaneEffects(EFFECT_USER);
       this.run(EFFECT_USER);
       if (__DEV__) DEV.hooks.onUpdate?.();
     } finally {
@@ -407,6 +429,11 @@ export class GlobalQueue extends Queue {
     }
     transitions.add(activeTransition);
     activeTransition._time = clock;
+    if (this._pendingNode !== null) {
+      this._pendingNode._transition = activeTransition;
+      activeTransition._pendingNodes.push(this._pendingNode);
+      this._pendingNode = null;
+    }
     if (this._pendingNodes !== activeTransition._pendingNodes) {
       for (let i = 0; i < this._pendingNodes.length; i++) {
         const node = this._pendingNodes[i];
@@ -431,6 +458,22 @@ export class GlobalQueue extends Queue {
       this._optimisticStores = activeTransition._optimisticStores;
     }
   }
+}
+
+export function queuePendingNode(node: Signal<any>): void {
+  if (activeTransition) {
+    globalQueue._pendingNodes.push(node);
+    return;
+  }
+  if (globalQueue._pendingNode === null && globalQueue._pendingNodes.length === 0) {
+    globalQueue._pendingNode = node;
+    return;
+  }
+  if (globalQueue._pendingNode !== null) {
+    globalQueue._pendingNodes.push(globalQueue._pendingNode);
+    globalQueue._pendingNode = null;
+  }
+  globalQueue._pendingNodes.push(node);
 }
 
 export function insertSubs(node: Signal<any> | Computed<any>, optimistic: boolean = false): void {
@@ -471,19 +514,34 @@ export function insertSubs(node: Signal<any> | Computed<any>, optimistic: boolea
   }
 }
 
-function commitPendingNodes() {
-  const pendingNodes = globalQueue._pendingNodes;
-  for (let i = 0; i < pendingNodes.length; i++) {
-    const n = pendingNodes[i];
+function commitPendingNode(n: Signal<any>): void {
+  const c = n as Partial<Computed<unknown>>;
+  if (!c._fn) {
     if (n._pendingValue !== NOT_PENDING) {
       n._value = n._pendingValue as any;
       n._pendingValue = NOT_PENDING;
-      // Set _modified for effects, but not for tracked effects (they handle their own scheduling)
-      if ((n as any)._type && (n as any)._type !== EFFECT_TRACKED) (n as any)._modified = true;
     }
-    if (!((n as Computed<unknown>)._statusFlags & STATUS_PENDING))
-      (n as Computed<unknown>)._statusFlags &= ~STATUS_UNINITIALIZED;
-    if ((n as Computed<unknown>)._fn) GlobalQueue._dispose(n as Computed<unknown>, false, true);
+    return;
+  }
+  if (n._pendingValue !== NOT_PENDING) {
+    n._value = n._pendingValue as any;
+    n._pendingValue = NOT_PENDING;
+    // Set _modified for effects, but not for tracked effects (they handle their own scheduling)
+    if ((n as any)._type && (n as any)._type !== EFFECT_TRACKED) (n as any)._modified = true;
+  }
+  if (!(c._statusFlags! & STATUS_PENDING)) c._statusFlags! &= ~STATUS_UNINITIALIZED;
+  if (c._pendingFirstChild !== null || c._pendingDisposal !== null)
+    GlobalQueue._dispose(c as Computed<unknown>, false, true);
+}
+
+function commitPendingNodes() {
+  if (globalQueue._pendingNode !== null) {
+    commitPendingNode(globalQueue._pendingNode);
+    globalQueue._pendingNode = null;
+  }
+  const pendingNodes = globalQueue._pendingNodes;
+  for (let i = 0; i < pendingNodes.length; i++) {
+    commitPendingNode(pendingNodes[i]);
   }
   pendingNodes.length = 0;
 }
@@ -496,10 +554,11 @@ export function finalizePureQueue(
   // For completing transitions or no-transition, resolve pending and revert optimistic
   const resolvePending = !incomplete;
   if (resolvePending) commitPendingNodes();
-  if (!incomplete) checkBoundaryChildren(globalQueue);
-  if (dirtyQueue._max >= dirtyQueue._min) runHeap(dirtyQueue, GlobalQueue._update);
+  if (!incomplete && globalQueue._children.length) checkBoundaryChildren(globalQueue);
+  const ranHeap = dirtyQueue._max >= dirtyQueue._min;
+  if (ranHeap) runHeap(dirtyQueue, GlobalQueue._update);
   if (resolvePending) {
-    commitPendingNodes();
+    if (ranHeap) commitPendingNodes();
     resolveOptimisticNodes(
       completingTransition ? completingTransition._optimisticNodes : globalQueue._optimisticNodes
     );
@@ -558,13 +617,15 @@ function reassignPendingTransition(pendingNodes: Signal<any>[]) {
 export const globalQueue = new GlobalQueue();
 
 /**
- * Synchronously processes the pending reactive queue: runs every scheduled
- * memo/effect/computation that has dirty inputs, until the graph is settled.
+ * Synchronously processes the pending reactive queue, or runs `fn` in a synchronous
+ * flush scope before draining the queue.
  *
  * Reactive updates are normally batched onto the microtask queue, so multiple
  * writes in a row collapse into a single update pass. Call `flush()` when you
  * need to *observe* the result of those writes synchronously — most commonly
- * in tests, but also at the boundary of imperative integration code.
+ * in tests, but also at the boundary of imperative integration code. Pass a
+ * callback when the writes themselves should avoid scheduling a redundant
+ * microtask because the queue will be flushed before `flush(fn)` returns.
  *
  * @example
  * ```ts
@@ -574,9 +635,22 @@ export const globalQueue = new GlobalQueue();
  * setCount(5);
  * flush();
  * expect(doubled()).toBe(10);
+ *
+ * flush(() => setCount(6));
+ * expect(doubled()).toBe(12);
  * ```
  */
-export function flush(): void {
+export function flush(): void;
+export function flush<T>(fn: () => T): T;
+export function flush<T>(fn?: () => T): T | void {
+  if (fn) {
+    syncDepth++;
+    try {
+      return fn();
+    } finally {
+      if (--syncDepth === 0) flush();
+    }
+  }
   if (globalQueue._running) {
     if (__DEV__ && inTrackedQueueCallback) {
       throw new Error(

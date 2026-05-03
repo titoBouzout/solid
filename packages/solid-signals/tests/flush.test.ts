@@ -52,3 +52,45 @@ it("should not fail if called while flushing", () => {
   flush();
   expect(effect).to.toHaveBeenCalledTimes(2);
 });
+
+it("should run callback and flush before returning", () => {
+  const [$x, setX] = createSignal(10);
+  const effect = vi.fn();
+
+  createRoot(() => createEffect($x, effect));
+  flush();
+
+  const result = flush(() => {
+    setX(20);
+    expect(effect).to.toHaveBeenCalledTimes(1);
+    return "done";
+  });
+
+  expect(result).toBe("done");
+  expect(effect).to.toHaveBeenCalledTimes(2);
+});
+
+it("should only flush after the outermost callback", () => {
+  const [$x, setX] = createSignal(10);
+  const [$y, setY] = createSignal(10);
+  const effect = vi.fn();
+
+  createRoot(() => createEffect(() => [$x(), $y()], effect));
+  flush();
+
+  flush(() => {
+    setX(20);
+    expect(effect).to.toHaveBeenCalledTimes(1);
+
+    const inner = flush(() => {
+      setY(30);
+      expect(effect).to.toHaveBeenCalledTimes(1);
+      return 1;
+    });
+
+    expect(inner).toBe(1);
+    expect(effect).to.toHaveBeenCalledTimes(1);
+  });
+
+  expect(effect).to.toHaveBeenCalledTimes(2);
+});

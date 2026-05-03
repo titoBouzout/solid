@@ -21,6 +21,7 @@ import {
   flush,
   globalQueue,
   insertSubs,
+  queuePendingNode,
   schedule,
   zombieQueue
 } from "./scheduler.js";
@@ -280,13 +281,13 @@ export function handleAsync<T>(
 }
 
 export function clearStatus(el: Computed<any>, clearUninitialized: boolean = false): void {
-  clearPendingSources(el);
-  el._blocked = false;
+  if (el._pendingSource || el._pendingSources) clearPendingSources(el);
+  if (el._blocked) el._blocked = false;
   el._statusFlags = clearUninitialized ? 0 : el._statusFlags & STATUS_UNINITIALIZED;
-  setPendingError(el);
+  if (el._error) setPendingError(el);
   // Update pending signal for isPending() reactivity
-  updatePendingSignal(el);
-  el._notifyStatus?.();
+  if (el._pendingSignal) updatePendingSignal(el);
+  if (el._notifyStatus) el._notifyStatus();
 }
 
 export function notifyStatus(
@@ -355,7 +356,7 @@ export function notifyStatus(
       (status !== STATUS_PENDING &&
         (sub._error !== error || sub._pendingSource || sub._pendingSources))
     ) {
-      if (!downstreamBlockStatus && !sub._transition) globalQueue._pendingNodes.push(sub);
+      if (!downstreamBlockStatus && !sub._transition) queuePendingNode(sub);
       notifyStatus(sub, status, error, downstreamBlockStatus, downstreamLane);
     }
   });
