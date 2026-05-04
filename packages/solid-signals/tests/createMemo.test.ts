@@ -8,6 +8,7 @@ import {
   createSignal,
   flush,
   isPending,
+  isRefreshing,
   latest,
   onCleanup,
   refresh,
@@ -657,6 +658,97 @@ describe("async compute", () => {
     expect(value).toBe("stale");
     await new Promise(r => setTimeout(r, 0));
     expect(value).toBe(3);
+  });
+
+  it("should only refresh the targeted memo, not its upstream memos (#2691)", () => {
+    let upstreamRuns = 0;
+    let downstreamRuns = 0;
+    createRoot(() => {
+      const [, setX] = createSignal(0);
+      const upstream = createMemo(() => {
+        upstreamRuns++;
+        return setX;
+      });
+      const downstream = createMemo(() => {
+        downstreamRuns++;
+        return upstream();
+      });
+      downstream(); // initial read
+      flush();
+      expect(upstreamRuns).toBe(1);
+      expect(downstreamRuns).toBe(1);
+      refresh(downstream);
+      flush();
+      expect(upstreamRuns).toBe(1);
+      expect(downstreamRuns).toBe(2);
+    });
+  });
+
+  it("should refresh every top-level read inside a refresh callback but not their deps (#2691)", () => {
+    let aRuns = 0;
+    let bRuns = 0;
+    let aDepRuns = 0;
+    let bDepRuns = 0;
+    createRoot(() => {
+      const [s] = createSignal(0);
+      const aDep = createMemo(() => {
+        aDepRuns++;
+        return s();
+      });
+      const bDep = createMemo(() => {
+        bDepRuns++;
+        return s();
+      });
+      const a = createMemo(() => {
+        aRuns++;
+        return aDep();
+      });
+      const b = createMemo(() => {
+        bRuns++;
+        return bDep();
+      });
+      a();
+      b();
+      flush();
+      expect(aRuns).toBe(1);
+      expect(bRuns).toBe(1);
+      expect(aDepRuns).toBe(1);
+      expect(bDepRuns).toBe(1);
+      refresh(() => {
+        a();
+        b();
+      });
+      flush();
+      expect(aRuns).toBe(2);
+      expect(bRuns).toBe(2);
+      expect(aDepRuns).toBe(1);
+      expect(bDepRuns).toBe(1);
+    });
+  });
+
+  it("should allow opting into chained refresh via isRefreshing()", () => {
+    let depRuns = 0;
+    let targetRuns = 0;
+    createRoot(() => {
+      const [s] = createSignal(0);
+      const dep = createMemo(() => {
+        depRuns++;
+        return s();
+      });
+      const target = createMemo(() => {
+        targetRuns++;
+        if (isRefreshing()) refresh(dep);
+        return dep();
+      });
+      target();
+      flush();
+      expect(depRuns).toBe(1);
+      expect(targetRuns).toBe(1);
+      refresh(target);
+      flush();
+      expect(depRuns).toBe(2);
+      expect(targetRuns).toBe(2);
+    });
   });
 
   it("should should show pending state in graph", async () => {
