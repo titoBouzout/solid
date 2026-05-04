@@ -3,6 +3,7 @@ import {
   REACTIVE_DIRTY,
   REACTIVE_IN_HEAP,
   REACTIVE_IN_HEAP_HEIGHT,
+  REACTIVE_MANUAL_WRITE,
   REACTIVE_RECOMPUTING_DEPS
 } from "./constants.js";
 import type { Computed, FirewallSignal, Root } from "./types.js";
@@ -39,7 +40,7 @@ function actualInsertIntoHeap(n: Computed<unknown>, heap: Heap) {
 }
 export function insertIntoHeap(n: Computed<any>, heap: Heap) {
   let flags = n._flags;
-  if (flags & (REACTIVE_IN_HEAP | REACTIVE_RECOMPUTING_DEPS)) return;
+  if (flags & (REACTIVE_IN_HEAP | REACTIVE_RECOMPUTING_DEPS | REACTIVE_MANUAL_WRITE)) return;
   if (flags & REACTIVE_CHECK) {
     n._flags = (flags & ~(REACTIVE_CHECK | REACTIVE_DIRTY)) | REACTIVE_DIRTY | REACTIVE_IN_HEAP;
   } else n._flags = flags | REACTIVE_IN_HEAP;
@@ -48,7 +49,11 @@ export function insertIntoHeap(n: Computed<any>, heap: Heap) {
 
 export function insertIntoHeapHeight(n: Computed<unknown>, heap: Heap) {
   let flags = n._flags;
-  if (flags & (REACTIVE_IN_HEAP | REACTIVE_RECOMPUTING_DEPS | REACTIVE_IN_HEAP_HEIGHT)) return;
+  if (
+    flags &
+    (REACTIVE_IN_HEAP | REACTIVE_RECOMPUTING_DEPS | REACTIVE_IN_HEAP_HEIGHT | REACTIVE_MANUAL_WRITE)
+  )
+    return;
   n._flags = flags | REACTIVE_IN_HEAP_HEIGHT;
   actualInsertIntoHeap(n, heap);
 }

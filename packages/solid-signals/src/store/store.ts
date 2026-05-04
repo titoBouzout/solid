@@ -12,6 +12,7 @@ import {
   setSignal,
   signal,
   STORE_SNAPSHOT_PROPS,
+  suppressComputedRecompute,
   trackOptimisticStore,
   untrack,
   type Computed,
@@ -727,5 +728,13 @@ export function createStore<T extends object = {}>(
 
   if (__DEV__) registerGraph(wrappedStore, getOwner());
 
-  return [wrappedStore, (fn: (draft: T) => void): void => storeSetter(wrappedStore, fn)];
+  return [
+    wrappedStore,
+    derived
+      ? (fn: (draft: T) => void): void => (
+          storeSetter(wrappedStore, fn),
+          suppressComputedRecompute((wrappedStore as any)[$REFRESH])
+        )
+      : (fn: (draft: T) => void): void => storeSetter(wrappedStore, fn)
+  ];
 }

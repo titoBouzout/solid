@@ -7,6 +7,8 @@ export {
   signal,
   read,
   setSignal,
+  setMemo,
+  suppressComputedRecompute,
   optimisticSignal,
   optimisticComputed,
   isPending,

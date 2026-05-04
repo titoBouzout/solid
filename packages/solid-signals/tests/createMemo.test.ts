@@ -726,6 +726,114 @@ describe("async compute", () => {
     });
   });
 
+  it("should let a manual setSignal write to a memo win over a queued recompute (#2692)", () => {
+    const [original, setOriginal, derived, setDerived] = createRoot(() => {
+      const [o, setO] = createSignal(0);
+      const [d, setD] = createSignal(o);
+      return [o, setO, d, setD] as const;
+    });
+    expect(derived()).toBe(0);
+    setOriginal(1);
+    setDerived(2);
+    flush();
+    expect(original()).toBe(1);
+    expect(derived()).toBe(2);
+    // Subsequent change to upstream still recomputes the memo
+    setOriginal(3);
+    flush();
+    expect(derived()).toBe(3);
+  });
+
+  it("should let a manual setSignal write win even when an intermediate memo re-marks it (#2692)", () => {
+    let observed: number | undefined;
+    const [setA, setC] = createRoot(() => {
+      const [a, sA] = createSignal(0);
+      const b = createMemo(() => a() * 10);
+      const [c, sC] = createSignal(b);
+      createRenderEffect(c, v => {
+        observed = v;
+      });
+      return [sA, sC] as const;
+    });
+    flush();
+    expect(observed).toBe(0);
+    setA(1);
+    setC(99);
+    flush();
+    expect(observed).toBe(99);
+    setA(2);
+    flush();
+    expect(observed).toBe(20);
+  });
+
+  it("write trumps recompute regardless of order within a tick (#2692)", () => {
+    const [setOriginal, setDerived, derived] = createRoot(() => {
+      const [original, setO] = createSignal(0);
+      const [d, setD] = createSignal(original);
+      return [setO, setD, d] as const;
+    });
+    setDerived(2);
+    setOriginal(1);
+    flush();
+    expect(derived()).toBe(2);
+  });
+
+  it("latest manual write wins on a memo within a tick (#2692)", () => {
+    const [setOriginal, setDerived, derived] = createRoot(() => {
+      const [original, setO] = createSignal(0);
+      const [d, setD] = createSignal(original);
+      return [setO, setD, d] as const;
+    });
+    setOriginal(1);
+    setDerived(2);
+    setDerived(3);
+    flush();
+    expect(derived()).toBe(3);
+  });
+
+  it("same-value manual write still trumps recompute within a tick (#2692)", () => {
+    const [setOriginal, setDerived, derived] = createRoot(() => {
+      const [original, setO] = createSignal(0);
+      const [d, setD] = createSignal(original);
+      return [setO, setD, d] as const;
+    });
+    setOriginal(1);
+    setDerived(0);
+    flush();
+    expect(derived()).toBe(0);
+  });
+
+  it("refresh() forces a recompute even after a manual memo write in the same tick (#2692)", () => {
+    const [setOriginal, setDerived, derived] = createRoot(() => {
+      const [original, setO] = createSignal(0);
+      const [d, setD] = createSignal(original);
+      return [setO, setD, d] as const;
+    });
+    setOriginal(1);
+    setDerived(2);
+    refresh(derived);
+    flush();
+    expect(derived()).toBe(1);
+  });
+
+  it("should propagate manual setSignal write to subscribers when upstream also changed (#2692)", () => {
+    let observed: number | undefined;
+    const [setOriginal, setDerived] = createRoot(() => {
+      const [original, setO] = createSignal(0);
+      const [derived, setD] = createSignal(original);
+      createRenderEffect(derived, v => {
+        observed = v;
+      });
+      return [setO, setD] as const;
+    });
+    flush();
+    expect(observed).toBe(0);
+    setOriginal(1);
+    setDerived(2);
+    flush();
+    expect(observed).toBe(2);
+  });
+
   it("should allow opting into chained refresh via isRefreshing()", () => {
     let depRuns = 0;
     let targetRuns = 0;

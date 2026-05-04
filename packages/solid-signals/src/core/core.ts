@@ -17,6 +17,7 @@ import {
   REACTIVE_IN_HEAP,
   REACTIVE_IN_HEAP_HEIGHT,
   REACTIVE_LAZY,
+  REACTIVE_MANUAL_WRITE,
   REACTIVE_NONE,
   REACTIVE_OPTIMISTIC_DIRTY,
   REACTIVE_RECOMPUTING_DEPS,
@@ -876,6 +877,32 @@ export function setSignal<T>(el: Signal<T> | Computed<T>, v: T | ((prev: T) => T
   insertSubs(el, isOptimistic);
   schedule();
   return v;
+}
+
+/**
+ * Suppresses automatic recomputation of `el` until the scheduler drains. Used
+ * when a manual write should win over dependency changes queued in the same
+ * tick. The MANUAL_WRITE flag is cleared by the pending-node drain; projection
+ * computeds don't commit values, but they still need the same end-of-tick
+ * cleanup point.
+ */
+export function suppressComputedRecompute(el: Computed<unknown>): void {
+  deleteFromHeap(el, el._flags & REACTIVE_ZOMBIE ? zombieQueue : dirtyQueue);
+  if (!(el._flags & REACTIVE_MANUAL_WRITE) && el._pendingValue === NOT_PENDING)
+    queuePendingNode(el);
+  el._flags = (el._flags & ~(REACTIVE_DIRTY | REACTIVE_CHECK)) | REACTIVE_MANUAL_WRITE;
+}
+
+/**
+ * User-facing setter for the memo form of `createSignal(fn)`. Behaves like
+ * `setSignal`, but also cancels any pending recompute of the memo so the
+ * manual value wins over a value that would otherwise be produced by an
+ * upstream change in the same tick.
+ */
+export function setMemo<T>(el: Computed<T>, v: T | ((prev: T) => T)): T {
+  const result = setSignal(el, v);
+  suppressComputedRecompute(el as Computed<unknown>);
+  return result;
 }
 
 /**

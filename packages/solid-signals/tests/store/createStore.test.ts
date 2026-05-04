@@ -1193,3 +1193,51 @@ describe("arrays", () => {
     expect(effectC).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("derived store manual writes", () => {
+  it("manual setStore on a derived store wins over a queued recompute (#2692)", () => {
+    const [setSource, store, setStore] = createRoot(() => {
+      const [source, sSource] = createSignal({ count: 0 });
+      const [s, sStore] = createStore<{ count: number }>(() => ({ count: source().count }), {
+        count: 0
+      });
+      return [sSource, s, sStore] as const;
+    });
+    flush();
+    expect(store.count).toBe(0);
+    setSource({ count: 1 });
+    setStore(s => {
+      s.count = 99;
+    });
+    flush();
+    expect(store.count).toBe(99);
+    setSource({ count: 2 });
+    flush();
+    expect(store.count).toBe(2);
+  });
+
+  it("same-value setStore on a derived store keeps the override for the tick (#2692)", () => {
+    const [setSource, store, setStore] = createRoot(() => {
+      const [source, sSource] = createSignal({ count: 0 });
+      const [s, sStore] = createStore<{ count: number }>(() => ({ count: source().count }), {
+        count: 0
+      });
+      return [sSource, s, sStore] as const;
+    });
+    flush();
+    setStore(s => {
+      s.count = 99;
+    });
+    flush();
+    expect(store.count).toBe(99);
+    setSource({ count: 1 });
+    setStore(s => {
+      s.count = 99;
+    });
+    flush();
+    expect(store.count).toBe(99);
+    setSource({ count: 2 });
+    flush();
+    expect(store.count).toBe(2);
+  });
+});

@@ -15,6 +15,7 @@ import {
   optimisticSignal,
   read,
   runWithOwner,
+  setMemo,
   setSignal,
   signal,
   trackedEffect,
@@ -264,7 +265,7 @@ export function createSignal<T>(
     node._config &= ~CONFIG_AUTO_DISPOSE;
     return [
       accessor<T | undefined>(node),
-      setSignal.bind(null, node as any) as Setter<T | undefined>
+      setMemo.bind(null, node as any) as Setter<T | undefined>
     ];
   }
   const node = signal<T>(first as any, second as SignalOptions<T>);

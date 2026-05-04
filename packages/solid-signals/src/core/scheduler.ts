@@ -6,6 +6,7 @@ import {
   EFFECT_USER,
   NOT_PENDING,
   REACTIVE_DISPOSED,
+  REACTIVE_MANUAL_WRITE,
   REACTIVE_OPTIMISTIC_DIRTY,
   REACTIVE_SNAPSHOT_STALE,
   REACTIVE_ZOMBIE,
@@ -529,6 +530,7 @@ function commitPendingNode(n: Signal<any>): void {
     // Set _modified for effects, but not for tracked effects (they handle their own scheduling)
     if ((n as any)._type && (n as any)._type !== EFFECT_TRACKED) (n as any)._modified = true;
   }
+  c._flags! &= ~REACTIVE_MANUAL_WRITE;
   if (!(c._statusFlags! & STATUS_PENDING)) c._statusFlags! &= ~STATUS_UNINITIALIZED;
   if (c._pendingFirstChild !== null || c._pendingDisposal !== null)
     GlobalQueue._dispose(c as Computed<unknown>, false, true);
