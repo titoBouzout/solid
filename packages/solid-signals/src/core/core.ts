@@ -373,6 +373,7 @@ export function computed<T>(
     _subsTail: null,
     _parent: context,
     _nextSibling: null,
+    _prevSibling: null,
     _firstChild: null,
     _flags: options?.lazy ? REACTIVE_LAZY : REACTIVE_NONE,
     _statusFlags: STATUS_UNINITIALIZED,
@@ -405,6 +406,7 @@ export function computed<T>(
       context._firstChild = self;
     } else {
       self._nextSibling = lastChild;
+      lastChild._prevSibling = self;
       context._firstChild = self;
     }
   }

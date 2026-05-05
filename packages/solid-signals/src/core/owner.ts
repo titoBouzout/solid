@@ -46,8 +46,9 @@ export function dispose(node: Computed<unknown>): void {
 }
 
 export function disposeChildren(node: Owner, self: boolean = false, zombie?: boolean): void {
-  if ((node as any)._flags & REACTIVE_DISPOSED) return;
-  if (self) (node as any)._flags = REACTIVE_DISPOSED;
+  const flags = (node as any)._flags;
+  if (flags & REACTIVE_DISPOSED) return;
+  if (self) (node as any)._flags = flags | REACTIVE_DISPOSED;
   if (self && __DEV__) clearSignals(node);
   if (self && (node as any)._fn) (node as Computed<unknown>)._inFlight = null;
   let child = zombie ? (node._pendingFirstChild as Owner) : node._firstChild;
@@ -71,6 +72,24 @@ export function disposeChildren(node: Owner, self: boolean = false, zombie?: boo
   } else {
     node._firstChild = null;
     node._childCount = 0;
+  }
+  // O(1) splice out of parent's chain on individual dispose. Skipped during
+  // batch dispose (parent already disposed) and zombie disposal (node sits on
+  // parent's _pendingFirstChild). We leave node._nextSibling intact so outer
+  // walks that already advanced past us still reach later siblings.
+  if (
+    self &&
+    !zombie &&
+    !(flags & REACTIVE_ZOMBIE) &&
+    node._parent !== null &&
+    !((node._parent as any)._flags & REACTIVE_DISPOSED)
+  ) {
+    const prev = node._prevSibling;
+    const next = node._nextSibling;
+    if (prev !== null) prev._nextSibling = next;
+    else node._parent._firstChild = next;
+    if (next !== null) next._prevSibling = prev;
+    node._prevSibling = null;
   }
   runDisposal(node, zombie);
 }
@@ -219,6 +238,7 @@ export function createOwner(options?: { id?: string; transparent?: boolean }) {
     _parentComputed: (parent as Root)?._root ? (parent as Root)._parentComputed : parent,
     _firstChild: null,
     _nextSibling: null,
+    _prevSibling: null,
     _disposal: null,
     _queue: parent?._queue ?? globalQueue,
     _context: parent?._context || defaultContext,
@@ -248,6 +268,7 @@ export function createOwner(options?: { id?: string; transparent?: boolean }) {
       parent._firstChild = owner;
     } else {
       owner._nextSibling = lastChild;
+      lastChild._prevSibling = owner;
       parent._firstChild = owner;
     }
   }

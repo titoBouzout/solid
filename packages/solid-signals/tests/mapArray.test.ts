@@ -1,4 +1,4 @@
-import { createEffect, createRoot, createSignal, flush, mapArray } from "../src/index.js";
+import { createEffect, createRoot, createSignal, flush, getOwner, mapArray } from "../src/index.js";
 
 it("should compute keyed map", () => {
   const [$source, setSource] = createSignal([{ id: "a" }, { id: "b" }, { id: "c" }]);
@@ -160,6 +160,39 @@ it("should compute map when key by index", () => {
 
   expect(map().length).toBe(0);
   expect(computed).toHaveBeenCalledTimes(4);
+});
+
+it("should not retain disposed row owners in the parent's sibling chain across full replacements", () => {
+  // Regression: inline `<For each={arr()}>` where `arr()` returns fresh objects
+  // every read. Keyed-by-identity disposes every old row owner each time; the
+  // disposed Roots used to stay linked into their parent's _firstChild chain
+  // via _nextSibling, accumulating per click.
+  const ROWS = 50;
+  const REPLACEMENTS = 10;
+  const make = () => Array.from({ length: ROWS }, () => ({ id: Math.random() }));
+  const [$src, setSrc] = createSignal(make());
+
+  let root: any;
+  const dispose = createRoot(d => {
+    mapArray($src, item => item().id)();
+    root = getOwner();
+    return d;
+  });
+  const total = (n: any): number => {
+    let c: any = 1;
+    for (let s = n._firstChild; s; s = s._nextSibling) c += total(s);
+    return c;
+  };
+
+  const initial = total(root);
+  for (let i = 0; i < REPLACEMENTS; i++) {
+    setSrc(make());
+    flush();
+  }
+  // Pre-fix: total grew by REPLACEMENTS * ROWS. Post-fix: stable.
+  expect(total(root)).toBe(initial);
+
+  dispose();
 });
 
 it("should compute custom keyed map", () => {

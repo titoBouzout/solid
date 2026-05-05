@@ -61,6 +61,7 @@ export interface Owner {
   _queue: IQueue;
   _firstChild: Owner | null;
   _nextSibling: Owner | null;
+  _prevSibling: Owner | null;
   _pendingDisposal: Disposable | Disposable[] | null;
   _pendingFirstChild: Owner | null;
 }
