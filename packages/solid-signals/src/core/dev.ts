@@ -21,7 +21,8 @@ export type DiagnosticCode =
   | "NO_OWNER_EFFECT"
   | "NO_OWNER_BOUNDARY"
   | "ASYNC_OUTSIDE_LOADING_BOUNDARY"
-  | "MISSING_EFFECT_FN";
+  | "MISSING_EFFECT_FN"
+  | "SYNC_NODE_RECEIVED_ASYNC";
 
 export type DiagnosticKind = "strict-read" | "async" | "write" | "lifecycle" | "owner";
 

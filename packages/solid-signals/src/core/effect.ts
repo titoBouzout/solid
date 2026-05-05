@@ -8,17 +8,30 @@ import {
   STATUS_ERROR,
   STATUS_PENDING
 } from "./constants.js";
-import { computed, recompute, setStrictRead, staleValues } from "./core.js";
+import {
+  computed,
+  createEffectNode,
+  recompute,
+  runWithOwner,
+  setStrictRead,
+  staleValues
+} from "./core.js";
 import { emitDiagnostic } from "./dev.js";
 import { StatusError } from "./error.js";
 import { cleanup } from "./owner.js";
-import { _hitUnhandledAsync, resetUnhandledAsync, setTrackedQueueCallback } from "./scheduler.js";
+import {
+  _hitUnhandledAsync,
+  GlobalQueue,
+  resetUnhandledAsync,
+  setTrackedQueueCallback
+} from "./scheduler.js";
 import type { Computed, NodeOptions, Owner } from "./types.js";
 
 export interface Effect<T> extends Computed<T>, Owner {
   _effectFn: (val: T, prev: T | undefined) => void | (() => void);
   _errorFn?: (err: unknown, cleanup: () => void) => void;
   _cleanup?: () => void;
+  _cleanupRegistered?: boolean;
   _modified: boolean;
   _prevValue: T | undefined;
   _type: number;
@@ -35,70 +48,20 @@ export function effect<T>(
   error?: (err: unknown, cleanup: () => void) => void | (() => void),
   options?: NodeOptions<any> & { user?: boolean; defer?: boolean; schedule?: boolean }
 ): void {
-  let initialized = false;
   const isUser = !!options?.user;
-  const node = computed<T>(isUser ? compute : p => staleValues(() => compute(p)), {
-    ...options,
-    equals: () => {
-      node._modified = !node._error;
-      if (initialized) node._queue.enqueue(node._type, runEffect.bind(node));
-      return false;
-    },
-    lazy: true
-  }) as Effect<T>;
-  node._config &= ~CONFIG_AUTO_DISPOSE;
-  node._prevValue = undefined;
-  node._effectFn = effect;
-  node._errorFn = error;
-  node._cleanup = undefined;
-  node._type = isUser ? EFFECT_USER : EFFECT_RENDER;
-  node._notifyStatus = (status?: number, error?: any) => {
-    // Use passed values if provided, otherwise read from node
-    const actualStatus = status !== undefined ? status : node._statusFlags;
-    const actualError = error !== undefined ? error : node._error;
-    if (actualStatus & STATUS_ERROR) {
-      let err = actualError;
-      node._queue.notify(node, STATUS_PENDING, 0);
-      if (node._type === EFFECT_USER) {
-        try {
-          return node._errorFn
-            ? node._errorFn(err, () => {
-                node._cleanup?.();
-                node._cleanup = undefined;
-              })
-            : console.error(err);
-        } catch (e) {
-          err = e;
-        }
-      }
-      if (!node._queue.notify(node, STATUS_ERROR, STATUS_ERROR)) throw err;
-    } else if (node._type === EFFECT_RENDER) {
-      node._queue.notify(node, STATUS_PENDING | STATUS_ERROR, actualStatus, actualError);
-      if (__DEV__ && _hitUnhandledAsync) {
-        resetUnhandledAsync();
-        if (!node._queue.notify(node, STATUS_ERROR, STATUS_ERROR)) {
-          const message =
-            "[ASYNC_OUTSIDE_LOADING_BOUNDARY] An async value was read outside a Loading boundary. The root mount will be deferred until all pending async settles.";
-          emitDiagnostic({
-            code: "ASYNC_OUTSIDE_LOADING_BOUNDARY",
-            kind: "async",
-            severity: "warn",
-            message,
-            ownerId: node.id,
-            ownerName: node._name
-          });
-          console.warn(message);
-        }
-      }
-    }
-  };
+  const node = createEffectNode<T>(
+    compute,
+    effect,
+    error,
+    isUser ? EFFECT_USER : EFFECT_RENDER,
+    notifyEffectStatus,
+    options
+  ) as Effect<T>;
   recompute(node, true);
   !options?.defer &&
     (node._type === EFFECT_USER || options?.schedule
-      ? node._queue.enqueue(node._type, runEffect.bind(node))
-      : runEffect.call(node));
-  initialized = true;
-  cleanup(() => node._cleanup?.());
+      ? node._queue.enqueue(node._type, runEffect.bind(null, node))
+      : runEffect(node));
   if (__DEV__ && !node._parent) {
     const message =
       "[NO_OWNER_EFFECT] Effects created outside a reactive context will never be disposed";
@@ -115,32 +78,79 @@ export function effect<T>(
   }
 }
 
-function runEffect(this: Effect<any>) {
-  if (!this._modified || this._flags & REACTIVE_DISPOSED) return;
+function notifyEffectStatus(this: Effect<any>, status?: number, error?: any): void {
+  // Use passed values if provided, otherwise read from node
+  const actualStatus = status !== undefined ? status : this._statusFlags;
+  const actualError = error !== undefined ? error : this._error;
+  if (actualStatus & STATUS_ERROR) {
+    let err = actualError;
+    this._queue.notify(this, STATUS_PENDING, 0);
+    if (this._type === EFFECT_USER) {
+      try {
+        return this._errorFn
+          ? this._errorFn(err, () => {
+              this._cleanup?.();
+              this._cleanup = undefined;
+            })
+          : console.error(err);
+      } catch (e) {
+        err = e;
+      }
+    }
+    if (!this._queue.notify(this, STATUS_ERROR, STATUS_ERROR)) throw err;
+  } else if (this._type === EFFECT_RENDER) {
+    this._queue.notify(this, STATUS_PENDING | STATUS_ERROR, actualStatus, actualError);
+    if (__DEV__ && _hitUnhandledAsync) {
+      resetUnhandledAsync();
+      if (!this._queue.notify(this, STATUS_ERROR, STATUS_ERROR)) {
+        const message =
+          "[ASYNC_OUTSIDE_LOADING_BOUNDARY] An async value was read outside a Loading boundary. The root mount will be deferred until all pending async settles.";
+        emitDiagnostic({
+          code: "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+          kind: "async",
+          severity: "warn",
+          message,
+          ownerId: this.id,
+          ownerName: this._name
+        });
+        console.warn(message);
+      }
+    }
+  }
+}
+
+function runEffect(node: Effect<any>): void {
+  if (!node._modified || node._flags & REACTIVE_DISPOSED) return;
   let prevStrictRead: string | false = false;
   if (__DEV__) {
     prevStrictRead = setStrictRead("an effect callback");
   }
-  this._cleanup?.();
-  this._cleanup = undefined;
+  node._cleanup?.();
+  node._cleanup = undefined;
   try {
-    const cleanup = this._effectFn(this._value, this._prevValue);
-    if (__DEV__ && cleanup !== undefined && typeof cleanup !== "function") {
+    const nextCleanup = node._effectFn(node._value, node._prevValue);
+    if (__DEV__ && nextCleanup !== undefined && typeof nextCleanup !== "function") {
       throw new Error(
-        `${this._name || "effect"} callback returned an invalid cleanup value. Return a cleanup function or undefined.`
+        `${node._name || "effect"} callback returned an invalid cleanup value. Return a cleanup function or undefined.`
       );
     }
-    this._cleanup = cleanup as (() => void) | undefined;
+    node._cleanup = nextCleanup as (() => void) | undefined;
+    if (node._cleanup && !node._cleanupRegistered) {
+      node._cleanupRegistered = true;
+      runWithOwner(node._parent, () => cleanup(() => node._cleanup?.()));
+    }
   } catch (error) {
-    this._error = new StatusError(this, error);
-    this._statusFlags |= STATUS_ERROR;
-    if (!this._queue.notify(this, STATUS_ERROR, STATUS_ERROR)) throw error;
+    node._error = new StatusError(node, error);
+    node._statusFlags |= STATUS_ERROR;
+    if (!node._queue.notify(node, STATUS_ERROR, STATUS_ERROR)) throw error;
   } finally {
     if (__DEV__) setStrictRead(prevStrictRead);
-    this._prevValue = this._value;
-    this._modified = false;
+    node._prevValue = node._value;
+    node._modified = false;
   }
 }
+
+GlobalQueue._runEffect = runEffect as (el: Computed<unknown>) => void;
 
 export interface TrackedEffect extends Computed<void> {
   _cleanup?: () => void;

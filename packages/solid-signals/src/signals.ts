@@ -158,6 +158,16 @@ export interface EffectOptions extends BaseEffectOptions {
    * `insert()` in `render()`).
    */
   schedule?: boolean;
+  /**
+   * Advanced. When true, asserts the compute function returns synchronous
+   * values only (never `PromiseLike` / `AsyncIterable`). Skips the
+   * async-shape probe in `recompute` for a small fixed-cost win per run.
+   * Intended for compiler emissions (`_$effect`) and library code that
+   * provably returns sync values. Returning a Promise or async iterable
+   * from a `sync: true` effect is undefined behavior — the value will be
+   * stored as-is and never awaited.
+   */
+  sync?: boolean;
 }
 
 /** Options for plain signals created with `createSignal(value)` or `createOptimistic(value)`. */
@@ -207,6 +217,16 @@ export interface MemoOptions<T> {
    * never autodispose.
    */
   lazy?: boolean;
+  /**
+   * Advanced. When true, asserts the compute function returns synchronous
+   * values only (never `PromiseLike` / `AsyncIterable`). Skips the
+   * async-shape probe in `recompute` for a small fixed-cost win per run.
+   * Intended for compiler emissions (`_$memo`) and library code that
+   * provably returns sync values. Returning a Promise or async iterable
+   * from a `sync: true` memo is undefined behavior — the value will be
+   * stored as-is and never awaited.
+   */
+  sync?: boolean;
 }
 
 // Magic type that when used at sites where generic types are inferred from, will prevent those sites from being involved in the inference.

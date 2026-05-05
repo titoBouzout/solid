@@ -1,4 +1,5 @@
 import {
+  CONFIG_SYNC,
   EFFECT_TRACKED,
   EFFECT_USER,
   NOT_PENDING,
@@ -10,6 +11,7 @@ import {
   STATUS_UNINITIALIZED
 } from "./constants.js";
 import { context, setSignal, untrack, updatePendingSignal } from "./core.js";
+import { emitDiagnostic } from "./dev.js";
 import { NotReadyError, StatusError } from "./error.js";
 import { insertIntoHeap } from "./heap.js";
 import { hasActiveOverride, resolveLane, resolveTransition, type OptimisticLane } from "./lanes.js";
@@ -134,14 +136,41 @@ export function handleAsync<T>(
   result: T | PromiseLike<T> | AsyncIterable<T>,
   setter?: (value: T) => void
 ): T {
-  const isObject = typeof result === "object" && result !== null;
-  const iterator = isObject && untrack(() => result[Symbol.asyncIterator]);
-  const isThenable =
-    !iterator && isObject && untrack(() => typeof (result as any).then === "function");
+  let iterator: any = false;
+  let isThenable = false;
+  if (typeof result === "object" && result !== null) {
+    untrack(() => {
+      iterator = (result as any)[Symbol.asyncIterator];
+      isThenable = !iterator && typeof (result as any).then === "function";
+    });
+  }
 
   if (!isThenable && !iterator) {
     el._inFlight = null;
     return result as T;
+  }
+
+  // Dev-only contract enforcement for `sync: true` nodes. In production these
+  // never reach `handleAsync` (the recompute fast path skips the call), but in
+  // dev they do — we run the full async-shape probe and diagnose if a Promise
+  // / AsyncIterable comes through. The fast-path semantics in production would
+  // silently store the unawaited value, which is what the user opted out of by
+  // passing `sync: true`; the diagnostic surfaces that mistake immediately.
+  if (__DEV__ && el._config & CONFIG_SYNC) {
+    const message =
+      `[SYNC_NODE_RECEIVED_ASYNC] A computed/effect created with \`sync: true\` returned ` +
+      `${isThenable ? "a Promise" : "an AsyncIterable"}. The value would be stored as-is and ` +
+      `never awaited in production; remove \`sync: true\` to use async-aware behavior, or ` +
+      `unwrap the value before returning.`;
+    emitDiagnostic({
+      code: "SYNC_NODE_RECEIVED_ASYNC",
+      kind: "lifecycle",
+      severity: "error",
+      message,
+      ownerId: el.id,
+      ownerName: (el as any)._name
+    });
+    throw new Error(message);
   }
 
   el._inFlight = result as PromiseLike<T> | AsyncIterable<T>;

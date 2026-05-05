@@ -70,7 +70,7 @@ it("should run callback and flush before returning", () => {
   expect(effect).to.toHaveBeenCalledTimes(2);
 });
 
-it("should only flush after the outermost callback", () => {
+it("nested flush(fn) drains at each level", () => {
   const [$x, setX] = createSignal(10);
   const [$y, setY] = createSignal(10);
   const effect = vi.fn();
@@ -89,8 +89,10 @@ it("should only flush after the outermost callback", () => {
     });
 
     expect(inner).toBe(1);
-    expect(effect).to.toHaveBeenCalledTimes(1);
+    // Inner flush drained, so effect already saw [20, 30].
+    expect(effect).to.toHaveBeenCalledTimes(2);
   });
 
+  // Outer flush drain finds nothing pending — no extra call.
   expect(effect).to.toHaveBeenCalledTimes(2);
 });

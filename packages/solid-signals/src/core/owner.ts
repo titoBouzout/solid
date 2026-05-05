@@ -218,6 +218,10 @@ export function isDisposed(node: Owner): boolean {
   return !!((node as any)._flags & (REACTIVE_DISPOSED | REACTIVE_ZOMBIE));
 }
 
+function disposeRootSelf(this: Root, self: boolean = true): void {
+  disposeChildren(this, self);
+}
+
 /**
  * Creates a fresh owner attached as a child of the current owner (or as a
  * detached root if there is none). Used by framework internals to group
@@ -246,9 +250,7 @@ export function createOwner(options?: { id?: string; transparent?: boolean }) {
     _pendingDisposal: null,
     _pendingFirstChild: null,
     _parent: parent,
-    dispose(self: boolean = true) {
-      disposeChildren(owner, self);
-    }
+    dispose: disposeRootSelf
   } as Root;
 
   if (__DEV__ && parent && parent._config & CONFIG_CHILDREN_FORBIDDEN) {
@@ -305,5 +307,5 @@ export function createRoot<T>(
   options?: { id?: string; transparent?: boolean }
 ): T {
   const owner = createOwner(options);
-  return runWithOwner(owner, () => init(owner.dispose));
+  return runWithOwner(owner, () => init(() => owner.dispose()));
 }

@@ -13,12 +13,13 @@ export {
   ssrRunInScope
 } from "solid-js";
 
-const transparentOptions = { transparent: true };
+const transparentOptions = { transparent: true, sync: true };
+const syncOptions = { sync: true };
 export const effect = (fn, effectFn, options) =>
   createRenderEffect(
     fn,
     effectFn,
-    options ? { transparent: true, ...options } : transparentOptions
+    options ? { transparent: true, sync: true, ...options } : transparentOptions
   );
 
-export const memo = fn => createMemo(() => fn());
+export const memo = fn => createMemo(() => fn(), syncOptions);

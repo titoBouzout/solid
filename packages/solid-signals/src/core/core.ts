@@ -6,9 +6,11 @@ import {
   CONFIG_IN_SNAPSHOT_SCOPE,
   CONFIG_NO_SNAPSHOT,
   CONFIG_OWNED_WRITE,
+  CONFIG_SYNC,
   CONFIG_TRANSPARENT,
   defaultContext,
   EFFECT_TRACKED,
+  EFFECT_USER,
   NO_SNAPSHOT,
   NOT_PENDING,
   REACTIVE_CHECK,
@@ -205,18 +207,26 @@ export function recompute(el: Computed<any>, create: boolean = false): void {
       }
     }
   }
+  const isStaleEffect = isEffect && isEffect !== EFFECT_USER;
+  const prevStale = stale;
+  if (isStaleEffect) stale = true;
   try {
-    // Snapshot `_inFlight` so we can detect whether `_fn` self-registered an async
-    // subscription (e.g. `createProjection` calls `handleAsync` from inside its body
-    // with a setter callback). In that case, the outer `handleAsync` call below would
-    // clobber the fresh subscription, so we skip it and let the internally-registered
-    // iteration drive updates.
-    const prevInFlight = el._inFlight;
-    const fnResult = el._fn(value);
-    const isAsyncResult = typeof fnResult === "object" && fnResult !== null;
-    const inFlightChanged = el._inFlight !== prevInFlight;
-    value = inFlightChanged || !isAsyncResult ? fnResult : handleAsync(el, fnResult);
-    if (!inFlightChanged && !isAsyncResult) el._inFlight = null;
+    if (!__DEV__ && el._config & CONFIG_SYNC) {
+      value = el._fn(value);
+      el._inFlight = null;
+    } else {
+      // Snapshot `_inFlight` so we can detect whether `_fn` self-registered an async
+      // subscription (e.g. `createProjection` calls `handleAsync` from inside its body
+      // with a setter callback). In that case, the outer `handleAsync` call below would
+      // clobber the fresh subscription, so we skip it and let the internally-registered
+      // iteration drive updates.
+      const prevInFlight = el._inFlight;
+      const fnResult = el._fn(value);
+      const isAsyncResult = typeof fnResult === "object" && fnResult !== null;
+      const inFlightChanged = el._inFlight !== prevInFlight;
+      value = inFlightChanged || !isAsyncResult ? fnResult : handleAsync(el, fnResult);
+      if (!inFlightChanged && !isAsyncResult) el._inFlight = null;
+    }
     clearStatus(el, create);
     if (el._optimisticLane) {
       const resolvedLane = resolveLane(el);
@@ -247,6 +257,7 @@ export function recompute(el: Computed<any>, create: boolean = false): void {
   } finally {
     tracking = prevTracking;
     if (__DEV__) strictRead = prevStrictRead;
+    if (isStaleEffect) stale = prevStale;
     el._flags = REACTIVE_NONE | (create ? el._flags & REACTIVE_SNAPSHOT_STALE : 0);
     context = oldcontext;
   }
@@ -268,6 +279,16 @@ export function recompute(el: Computed<any>, create: boolean = false): void {
         : el._pendingValue;
     const valueChanged =
       (!isEffect && wasUninitialized) || !el._equals || !el._equals(compareValue, value);
+
+    // Effects use `_equals: false` (no per-effect closure). The side effects that
+    // the equals closure used to perform — flagging the effect dirty and enqueueing
+    // its runner — happen here instead. `!create` matches the previous `initialized`
+    // gate: the explicit recompute(node, true) inside effect() does not enqueue, so
+    // effect() can call its runner synchronously for the first run.
+    if (isEffect && valueChanged) {
+      (el as any)._modified = !el._error;
+      if (!create) el._queue.enqueue(isEffect, GlobalQueue._runEffect.bind(null, el));
+    }
 
     if (valueChanged) {
       const prevVisible = hasOverride ? el._overrideValue : undefined;
@@ -354,6 +375,7 @@ export function computed<T>(
       (transparent ? CONFIG_TRANSPARENT : 0) |
       (options?.ownedWrite ? CONFIG_OWNED_WRITE : 0) |
       (!context || options?.lazy ? CONFIG_AUTO_DISPOSE : 0) |
+      (options?.sync ? CONFIG_SYNC : 0) |
       (snapshotCaptureActive && ownerInSnapshotScope(context) ? CONFIG_IN_SNAPSHOT_SCOPE : 0),
     _equals: options?.equals != null ? options.equals : isEqual,
     _unobserved: options?.unobserved,
@@ -385,6 +407,79 @@ export function computed<T>(
     _transition: null
   } as Computed<T>;
   if (__DEV__) (self as any)._name = options?.name ?? "computed";
+  setupComputedNode(self, options);
+  return self;
+}
+
+/**
+ * Build an Effect node with all effect-specific fields baked into a single object literal,
+ * so V8 sees the full hidden class shape at construction time. Effects always run in lazy
+ * mode (recompute is called explicitly by `effect()`), so we hardcode the lazy bits and skip
+ * the auto-dispose CONFIG bit (effect() previously cleared it post-construction).
+ */
+export function createEffectNode<T>(
+  fn: (prev?: T) => T,
+  effectFn: (val: T, prev: T | undefined) => void | (() => void),
+  errorFn: ((err: unknown, cleanup: () => void) => void | (() => void)) | undefined,
+  type: number,
+  notifyStatus: ((status?: number, error?: any) => void) | undefined,
+  options: NodeOptions<T> | undefined
+): any {
+  const transparent = options?.transparent ?? false;
+  const self = {
+    id:
+      options?.id ??
+      (transparent ? context?.id : context?.id != null ? getNextChildId(context) : undefined),
+    _config:
+      (transparent ? CONFIG_TRANSPARENT : 0) |
+      (options?.ownedWrite ? CONFIG_OWNED_WRITE : 0) |
+      (options?.sync ? CONFIG_SYNC : 0) |
+      (snapshotCaptureActive && ownerInSnapshotScope(context) ? CONFIG_IN_SNAPSHOT_SCOPE : 0),
+    _equals: false as unknown as Computed<T>["_equals"],
+    _unobserved: options?.unobserved,
+    _disposal: null,
+    _queue: context?._queue ?? globalQueue,
+    _context: context?._context ?? defaultContext,
+    _childCount: 0,
+    _fn: fn,
+    _value: undefined as T,
+    _height: 0,
+    _child: null,
+    _nextHeap: undefined,
+    _prevHeap: null as any,
+    _deps: null,
+    _depsTail: null,
+    _subs: null,
+    _subsTail: null,
+    _parent: context,
+    _nextSibling: null,
+    _prevSibling: null,
+    _firstChild: null,
+    _flags: REACTIVE_LAZY,
+    _statusFlags: STATUS_UNINITIALIZED,
+    _time: clock,
+    _pendingValue: NOT_PENDING,
+    _pendingDisposal: null,
+    _pendingFirstChild: null,
+    _inFlight: null,
+    _transition: null,
+    _modified: false,
+    _prevValue: undefined as T | undefined,
+    _effectFn: effectFn,
+    _errorFn: errorFn,
+    _cleanup: undefined as (() => void) | undefined,
+    _cleanupRegistered: false,
+    _type: type,
+    _notifyStatus: notifyStatus
+  } as any;
+  if (__DEV__) self._name = options?.name ?? "effect";
+  setupComputedNode(self, lazyOptions);
+  return self;
+}
+
+const lazyOptions = { lazy: true } as const;
+
+function setupComputedNode<T>(self: Computed<T>, options: NodeOptions<T> | undefined): void {
   self._prevHeap = self;
   const parent = (context as Root)?._root
     ? (context as Root)._parentComputed
@@ -430,8 +525,6 @@ export function computed<T>(
       snapshotSources!.add(self);
     }
   }
-
-  return self;
 }
 
 export function signal<T>(v: T, options?: NodeOptions<T>): Signal<T>;

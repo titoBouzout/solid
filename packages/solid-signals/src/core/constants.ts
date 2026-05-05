@@ -18,6 +18,7 @@ export const CONFIG_TRANSPARENT = 1 << 2;
 export const CONFIG_IN_SNAPSHOT_SCOPE = 1 << 3;
 export const CONFIG_CHILDREN_FORBIDDEN = 1 << 4;
 export const CONFIG_AUTO_DISPOSE = 1 << 5;
+export const CONFIG_SYNC = 1 << 6;
 
 export const STATUS_NONE = 0;
 export const STATUS_PENDING = 1 << 0;

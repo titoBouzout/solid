@@ -358,6 +358,21 @@ export const storeTraps: ProxyHandler<StoreNode> = {
     }
     const nodes = getNodes(target, STORE_NODE);
     const tracked = nodes[property];
+    const source = target[STORE_VALUE];
+    if (
+      !tracked &&
+      !target[STORE_OVERRIDE] &&
+      !target[STORE_OPTIMISTIC_OVERRIDE] &&
+      !target[STORE_CUSTOM_PROTO] &&
+      !target[STORE_OPTIMISTIC] &&
+      !target[STORE_SNAPSHOT_PROPS] &&
+      !source[$TARGET] &&
+      !(property in source) &&
+      getObserver() &&
+      !writeOnly(receiver)
+    ) {
+      return read(getNode(nodes, property, undefined, target[STORE_FIREWALL]));
+    }
     // Check optimistic override first, then regular override, then base value
     const optOverridden =
       target[STORE_OPTIMISTIC_OVERRIDE] && property in target[STORE_OPTIMISTIC_OVERRIDE];

@@ -178,4 +178,53 @@ describe("diagnostics", () => {
     expect(primitive!.severity).toBe("error");
     expect(primitive!.kind).toBe("lifecycle");
   });
+
+  it("emits a diagnostic when a sync: true memo returns a Promise", () => {
+    const capture = DEV!.diagnostics.capture();
+
+    expect(() =>
+      createRoot(() => {
+        const m = createMemo(() => Promise.resolve(1) as any, { sync: true, name: "asyncMemo" });
+        m();
+      })
+    ).toThrow(/SYNC_NODE_RECEIVED_ASYNC.*returned a Promise/);
+
+    const events = capture.stop();
+    const event = events.find(e => e.code === "SYNC_NODE_RECEIVED_ASYNC");
+    expect(event).toBeDefined();
+    expect(event!.severity).toBe("error");
+    expect(event!.kind).toBe("lifecycle");
+  });
+
+  it("emits a diagnostic when a sync: true memo returns an AsyncIterable", () => {
+    const capture = DEV!.diagnostics.capture();
+
+    async function* gen() {
+      yield 1;
+    }
+
+    expect(() =>
+      createRoot(() => {
+        const m = createMemo(() => gen() as any, { sync: true, name: "asyncIterMemo" });
+        m();
+      })
+    ).toThrow(/SYNC_NODE_RECEIVED_ASYNC.*returned an AsyncIterable/);
+
+    const events = capture.stop();
+    const event = events.find(e => e.code === "SYNC_NODE_RECEIVED_ASYNC");
+    expect(event).toBeDefined();
+    expect(event!.severity).toBe("error");
+  });
+
+  it("does not flag plain objects from sync: true memos", () => {
+    const capture = DEV!.diagnostics.capture();
+
+    createRoot(() => {
+      const m = createMemo(() => ({ value: 1 }), { sync: true });
+      expect(m()).toEqual({ value: 1 });
+    });
+
+    const events = capture.stop();
+    expect(events.find(e => e.code === "SYNC_NODE_RECEIVED_ASYNC")).toBeUndefined();
+  });
 });

@@ -23,6 +23,7 @@ export interface NodeOptions<T> {
   _noSnapshot?: boolean;
   unobserved?: () => void;
   lazy?: boolean;
+  sync?: boolean;
 }
 
 export interface RawSignal<T> {

@@ -309,6 +309,7 @@ export class GlobalQueue extends Queue {
   _optimisticStores: Set<any> = new Set();
   static _update: (el: Computed<unknown>) => void;
   static _dispose: (el: Computed<unknown>, self: boolean, zombie: boolean) => void;
+  static _runEffect: (el: Computed<unknown>) => void;
   static _clearOptimisticStore: ((store: any) => void) | null = null;
   flush() {
     if (this._running) return;
@@ -626,8 +627,8 @@ export const globalQueue = new GlobalQueue();
  * writes in a row collapse into a single update pass. Call `flush()` when you
  * need to *observe* the result of those writes synchronously — most commonly
  * in tests, but also at the boundary of imperative integration code. Pass a
- * callback when the writes themselves should avoid scheduling a redundant
- * microtask because the queue will be flushed before `flush(fn)` returns.
+ * callback when the writes themselves should bypass microtask scheduling and
+ * drain synchronously when the callback returns.
  *
  * @example
  * ```ts
@@ -640,6 +641,13 @@ export const globalQueue = new GlobalQueue();
  *
  * flush(() => setCount(6));
  * expect(doubled()).toBe(12);
+ *
+ * // Nested flushes drain at each level:
+ * flush(() => {
+ *   setCount(7);
+ *   flush(() => setCount(8)); // inner drain — effects fire here
+ *   // outer continues with up-to-date state
+ * });
  * ```
  */
 export function flush(): void;
@@ -650,7 +658,8 @@ export function flush<T>(fn?: () => T): T | void {
     try {
       return fn();
     } finally {
-      if (--syncDepth === 0) flush();
+      flush();
+      syncDepth--;
     }
   }
   if (globalQueue._running) {
