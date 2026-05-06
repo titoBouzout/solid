@@ -48,11 +48,11 @@ export const defaultContext = {};
 export const $REFRESH = Symbol("refresh");
 
 /**
- * Brand applied to derived/projected stores indicating they participate in
- * the `refresh()` re-run protocol. Use this alias instead of inlining
- * `T & { [$REFRESH]: any }` so that user-defined hooks that wrap
- * `createOptimisticStore` / `createProjection` / projection-form
- * `createStore` can have their return types inferred without leaking the
- * internal `$REFRESH` symbol into public type signatures (TS4058).
+ * Brand applied to values that participate in the `refresh()` re-run protocol.
+ * Accessors receive this handle internally; projected stores expose it through
+ * their public return type so user-defined hooks that wrap `createOptimisticStore`
+ * / `createProjection` / projection-form `createStore` can have their return
+ * types inferred without leaking the internal `$REFRESH` symbol into public type
+ * signatures (TS4058).
  */
 export type Refreshable<T> = T & { readonly [$REFRESH]: any };

@@ -1,6 +1,9 @@
 // Mock @solidjs/signals for server-side rendering
 // Re-exports infrastructure from the real package, reimplements reactive primitives as pull-based.
 
+import { $REFRESH } from "@solidjs/signals";
+export { $REFRESH };
+
 // === Re-exports from @solidjs/signals (infrastructure — no reactive scheduling) ===
 
 export {
@@ -25,9 +28,13 @@ export {
 } from "@solidjs/signals";
 
 export { flatten } from "@solidjs/signals";
-export { snapshot, merge, omit, storePath, $PROXY, $REFRESH, $TRACK } from "@solidjs/signals";
+export { snapshot, merge, omit, storePath, $PROXY, $TRACK } from "@solidjs/signals";
 
 // === Type re-exports ===
+
+import type { Accessor as SignalAccessor, Refreshable } from "@solidjs/signals";
+
+export type SourceAccessor<T> = Refreshable<SignalAccessor<T>>;
 
 export type {
   Accessor,
@@ -251,15 +258,15 @@ export function createSignal<T>(
 export function createMemo<T>(
   compute: ComputeFunction<undefined | NoInfer<T>, T>,
   options: ServerClientMemoOptions<T>
-): Accessor<T | undefined>;
+): SourceAccessor<T | undefined>;
 export function createMemo<T>(
   compute: ComputeFunction<undefined | NoInfer<T>, T>,
   options?: ServerMemoOptions<T>
-): Accessor<T>;
+): SourceAccessor<T>;
 export function createMemo<T>(
   compute: ComputeFunction<undefined | NoInfer<T>, T>,
   options?: ServerClientMemoOptions<T> | ServerMemoOptions<T>
-): Accessor<T | undefined> {
+): SourceAccessor<T | undefined> {
   // Capture SSR context at creation time — async re-computations (via .then callbacks)
   // may run after a concurrent request has overwritten sharedConfig.context.
   const ctx = sharedConfig.context;
@@ -306,7 +313,7 @@ export function createMemo<T>(
     update();
   }
 
-  return () => {
+  const read = (() => {
     // Lazy: compute on first read
     if (!comp.computed) {
       update();
@@ -315,7 +322,9 @@ export function createMemo<T>(
       throw comp.error;
     }
     return comp.value;
-  };
+  }) as SourceAccessor<T | undefined>;
+  (read as any)[$REFRESH] = comp;
+  return read;
 }
 
 // === Deep Proxy for Patch Tracking (projections with async iterables) ===
@@ -1133,8 +1142,8 @@ export function isRefreshing(): boolean {
   return false;
 }
 
-export function refresh<T>(fn: () => T): T {
-  return fn();
+export function refresh<T>(_target: Refreshable<T>): void {
+  return undefined;
 }
 
 export function action<T extends (...args: any[]) => any>(fn: T): T {

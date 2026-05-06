@@ -79,7 +79,6 @@ export const PRIMITIVE_IN_FORBIDDEN_SCOPE_MESSAGE =
 export let tracking = false;
 export let stale = false;
 export let refreshing = false;
-let refreshTrigger = false;
 export let pendingCheckActive = false;
 export let foundPending = false;
 export let latestReadActive = false;
@@ -694,11 +693,6 @@ export function read<T>(el: Signal<T> | Computed<T>): T {
   const computed = el as Partial<Computed<unknown>>;
   if (typeof computed._fn === "function") {
     const comp = el as Computed<unknown>;
-    if (refreshTrigger && !(comp._flags & REACTIVE_DISPOSED)) {
-      refreshTrigger = false;
-      recompute(comp);
-      refreshTrigger = true;
-    }
     if (comp._flags & REACTIVE_LAZY) {
       comp._flags &= ~REACTIVE_LAZY;
       recompute(comp as Computed<any>, true);
@@ -757,7 +751,7 @@ export function read<T>(el: Signal<T> | Computed<T>): T {
     }
   }
 
-  if (owner._statusFlags & STATUS_PENDING && !refreshing) {
+  if (owner._statusFlags & STATUS_PENDING) {
     if (c && !(stale && owner._transition && activeTransition !== owner._transition)) {
       if (__DEV__ && c && c._config & CONFIG_CHILDREN_FORBIDDEN) {
         const message =
@@ -1208,14 +1202,13 @@ export function isPending(fn: () => any): boolean {
 }
 
 /**
- * Forces a reactive source to re-execute, even if its inputs haven't changed.
+ * Invalidates one reactive source, forcing it to re-execute even if its inputs
+ * haven't changed.
  *
- * Two forms:
- * - `refresh(memo)` — pass an accessor (memo / signal getter) and its
- *   underlying computation reruns.
- * - `refresh(store)` — pass a *projected* store created from
- *   `createStore(fn, ...)` or `createProjection(...)` and the projection
- *   recomputes.
+ * Pass either a Solid-created accessor or a projected store created from
+ * `createStore(fn, ...)` / `createProjection(...)`. `refresh()` is a
+ * write-like invalidation operation: it does not read the target's value, and
+ * refreshing a plain signal accessor is a no-op.
  *
  * Use it to invalidate cached async values (e.g. force a re-fetch) without
  * tearing the consumer down.
@@ -1228,21 +1221,16 @@ export function isPending(fn: () => any): boolean {
  * <button onClick={() => refresh(user)}>Reload</button>
  * ```
  */
-export function refresh<T>(fn: (() => T) | Refreshable<T>): T {
+export function refresh<T>(target: Refreshable<T>): void {
   let prevRefreshing = refreshing;
-  let prevRefreshTrigger = refreshTrigger;
   refreshing = true;
-  refreshTrigger = true;
   try {
-    if (typeof fn !== "function") {
-      refreshTrigger = false;
-      recompute((fn as any)[$REFRESH] as Computed<any>);
-      return fn;
+    const node = (target as any)?.[$REFRESH] as Computed<any> | undefined;
+    if (node && typeof node._fn === "function" && !(node._flags & REACTIVE_DISPOSED)) {
+      recompute(node);
     }
-    return untrack(fn);
   } finally {
     refreshing = prevRefreshing;
-    refreshTrigger = prevRefreshTrigger;
     if (!prevRefreshing) {
       schedule();
     }

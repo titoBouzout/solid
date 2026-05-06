@@ -3,6 +3,8 @@ import {
   createRenderEffect,
   createMemo,
   Accessor,
+  SourceAccessor,
+  refresh,
   createSignal,
   createOptimistic,
   Signal,
@@ -118,6 +120,11 @@ createRenderEffect(
 
 const memo1 = createMemo(() => "hello");
 const memo1Value: string = memo1();
+const memo1Source: SourceAccessor<string> = memo1;
+const memo1Accessor: Accessor<string> = memo1Source;
+refresh(memo1);
+// @ts-expect-error refresh requires the original source accessor, not a wrapper read
+refresh(() => memo1());
 
 const memo2 = createMemo((prev?: number) => (prev ?? 0) + 1);
 const memo2Value: number = memo2();

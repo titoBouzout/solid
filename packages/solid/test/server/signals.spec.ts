@@ -464,10 +464,6 @@ describe("Server utilities", () => {
     expect(isRefreshing()).toBe(false);
   });
 
-  test("refresh passes through", () => {
-    expect(refresh(() => 42)).toBe(42);
-  });
-
   test("action passes through", () => {
     const fn = (x: number) => x + 1;
     expect(action(fn)).toBe(fn);

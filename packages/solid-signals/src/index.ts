@@ -64,6 +64,7 @@ export {
 } from "./signals.js";
 export type {
   Accessor,
+  SourceAccessor,
   Setter,
   Signal,
   ComputeFunction,

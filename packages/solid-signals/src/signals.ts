@@ -1,5 +1,6 @@
-import type { Disposable } from "./core/index.js";
+import type { Disposable, Refreshable } from "./core/index.js";
 import {
+  $REFRESH,
   cleanup,
   computed,
   CONFIG_AUTO_DISPOSE,
@@ -101,9 +102,12 @@ export function onCleanup(fn: Disposable): Disposable {
  * creating a subscription.
  */
 export type Accessor<T> = () => T;
+export type SourceAccessor<T> = Refreshable<Accessor<T>>;
 
-export function accessor<T>(node: any): Accessor<T> {
-  return read.bind(null, node) as Accessor<T>;
+export function accessor<T>(node: any): SourceAccessor<T> {
+  const fn = read.bind(null, node) as SourceAccessor<T>;
+  (fn as any)[$REFRESH] = node;
+  return fn;
 }
 
 /**
@@ -124,7 +128,7 @@ export type Setter<in out T> = {
 };
 
 /** A `[get, set]` pair returned from `createSignal` / `createOptimistic`. */
-export type Signal<T> = [get: Accessor<T>, set: Setter<T>];
+export type Signal<T> = [get: SourceAccessor<T>, set: Setter<T>];
 
 export type ComputeFunction<Prev, Next extends Prev = Prev> = (
   v: Prev
@@ -328,7 +332,7 @@ export function createSignal<T>(
 export function createMemo<T>(
   compute: ComputeFunction<undefined | NoInfer<T>, T>,
   options?: MemoOptions<T>
-): Accessor<T> {
+): SourceAccessor<T> {
   return accessor<T>(computed<T>(compute as any, options));
 }
 

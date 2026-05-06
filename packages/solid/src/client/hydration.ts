@@ -29,6 +29,7 @@ import {
   type Refreshable,
   type Signal,
   type SignalOptions,
+  type SourceAccessor,
   type Store,
   type StoreSetter,
   createOwner,
@@ -846,11 +847,11 @@ export const createMemo: {
   <T>(
     compute: ComputeFunction<undefined | NoInfer<T>, T>,
     options: HydrationClientMemoOptions<T>
-  ): Accessor<T | undefined>;
+  ): SourceAccessor<T | undefined>;
   <T>(
     compute: ComputeFunction<undefined | NoInfer<T>, T>,
     options?: HydrationMemoOptions<T>
-  ): Accessor<T>;
+  ): SourceAccessor<T>;
 } = ((...args: any[]) => (_createMemo || coreMemo)(...args)) as any;
 
 /**

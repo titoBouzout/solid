@@ -16,6 +16,7 @@ import {
   untrack
   // hasUpdated
 } from "../src/index.js";
+import type { SourceAccessor } from "../src/index.js";
 
 afterEach(() => flush());
 
@@ -684,7 +685,7 @@ describe("async compute", () => {
     });
   });
 
-  it("should refresh every top-level read inside a refresh callback but not their deps (#2691)", () => {
+  it("should refresh explicit targets but not their deps (#2691)", () => {
     let aRuns = 0;
     let bRuns = 0;
     let aDepRuns = 0;
@@ -714,10 +715,8 @@ describe("async compute", () => {
       expect(bRuns).toBe(1);
       expect(aDepRuns).toBe(1);
       expect(bDepRuns).toBe(1);
-      refresh(() => {
-        a();
-        b();
-      });
+      refresh(a);
+      refresh(b);
       flush();
       expect(aRuns).toBe(2);
       expect(bRuns).toBe(2);
@@ -727,7 +726,7 @@ describe("async compute", () => {
   });
 
   it("refresh() does not throw upstream pending reads from a plain memo (#2694)", () => {
-    let target!: () => number;
+    let target!: SourceAccessor<number>;
 
     createRoot(() => {
       const source = createMemo(() => new Promise<number>(() => {}));
@@ -736,6 +735,36 @@ describe("async compute", () => {
     });
 
     expect(() => refresh(target)).not.toThrow();
+  });
+
+  it("refresh() does not execute unbranded function wrappers", () => {
+    let wrappedRuns = 0;
+    let targetRuns = 0;
+    createRoot(() => {
+      const target = createMemo(() => {
+        targetRuns++;
+        return 1;
+      });
+      target();
+      flush();
+      expect(targetRuns).toBe(1);
+
+      refresh((() => {
+        wrappedRuns++;
+        return target();
+      }) as any);
+      flush();
+      expect(wrappedRuns).toBe(0);
+      expect(targetRuns).toBe(1);
+    });
+  });
+
+  it("refresh() treats plain signal accessors as no-op targets", () => {
+    const [count] = createSignal(0);
+
+    expect(() => refresh(count)).not.toThrow();
+    flush();
+    expect(count()).toBe(0);
   });
 
   it("should let a manual setSignal write to a memo win over a queued recompute (#2692)", () => {

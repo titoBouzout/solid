@@ -54,6 +54,7 @@ export type {
   Refreshable,
   Signal,
   SignalOptions,
+  SourceAccessor,
   Setter,
   Store,
   SolidStore,
