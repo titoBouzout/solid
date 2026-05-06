@@ -33,7 +33,7 @@ import {
 } from "./constants.js";
 import { NotReadyError } from "./error.js";
 import { externalSourceConfig } from "./external.js";
-import { link, unobserved, unlinkSubs } from "./graph.js";
+import { link, trimStaleDeps, unobserved } from "./graph.js";
 import {
   deleteFromHeap,
   insertIntoHeap,
@@ -263,15 +263,7 @@ export function recompute(el: Computed<any>, create: boolean = false): void {
   }
 
   if (!el._error) {
-    const depsTail = el._depsTail as Link | null;
-    let toRemove = depsTail !== null ? depsTail._nextDep : el._deps;
-    if (toRemove !== null) {
-      do {
-        toRemove = unlinkSubs(toRemove);
-      } while (toRemove !== null);
-      if (depsTail !== null) depsTail._nextDep = null;
-      else el._deps = null;
-    }
+    trimStaleDeps(el);
     const compareValue = hasOverride
       ? el._overrideValue
       : el._pendingValue === NOT_PENDING

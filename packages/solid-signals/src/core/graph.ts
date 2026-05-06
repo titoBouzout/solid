@@ -29,6 +29,18 @@ export function unlinkSubs(link: Link): Link | null {
   return nextDep;
 }
 
+export function trimStaleDeps(el: Computed<any>): void {
+  const depsTail = el._depsTail;
+  let toRemove = depsTail !== null ? depsTail._nextDep : el._deps;
+  if (toRemove !== null) {
+    do {
+      toRemove = unlinkSubs(toRemove);
+    } while (toRemove !== null);
+    if (depsTail !== null) depsTail._nextDep = null;
+    else el._deps = null;
+  }
+}
+
 export function unobserved(el: Computed<unknown>) {
   deleteFromHeap(el, el._flags & REACTIVE_ZOMBIE ? zombieQueue : dirtyQueue);
   let dep = el._deps;

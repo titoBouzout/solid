@@ -1137,6 +1137,46 @@ describe("async compute", () => {
     expect(effect).toHaveBeenCalledTimes(1);
   });
 
+  it("should drop stale dependencies when an async memo suspends after untracked branching (#2695)", async () => {
+    const [count, setCount] = createSignal(0);
+    let runs = 0;
+    let resolveDidIt!: () => void;
+
+    createRoot(() => {
+      const shouldDoIt = createMemo(() => count() % 2 > 0);
+      const didIt = createMemo(async () => {
+        if (!untrack(shouldDoIt)) {
+          shouldDoIt();
+          return false;
+        }
+        runs++;
+        await new Promise<void>(resolve => {
+          resolveDidIt = resolve;
+        });
+        return true;
+      });
+      createLoadingBoundary(didIt, () => false)();
+    });
+
+    expect(runs).toBe(0);
+
+    setCount(1);
+    flush();
+    expect(runs).toBe(1);
+
+    resolveDidIt();
+    await Promise.resolve();
+    await Promise.resolve();
+    flush();
+
+    setCount(2);
+    flush();
+
+    setCount(3);
+    flush();
+    expect(runs).toBe(1);
+  });
+
   // it("should still resolve in deferred untracked scopes", async () => {
   //   const [s, set] = createSignal(1);
   //   const async1 = vi.fn(() => Promise.resolve(s()));

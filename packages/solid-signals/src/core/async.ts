@@ -13,6 +13,7 @@ import {
 import { context, setSignal, untrack, updatePendingSignal } from "./core.js";
 import { emitDiagnostic } from "./dev.js";
 import { NotReadyError, StatusError } from "./error.js";
+import { trimStaleDeps } from "./graph.js";
 import { insertIntoHeap } from "./heap.js";
 import { hasActiveOverride, resolveLane, resolveTransition, type OptimisticLane } from "./lanes.js";
 import { cleanup } from "./owner.js";
@@ -192,6 +193,7 @@ export function handleAsync<T>(
     if (el._flags & (REACTIVE_DIRTY | REACTIVE_OPTIMISTIC_DIRTY)) return;
     globalQueue.initTransition(resolveTransition(el as any));
     const wasUninitialized = !!(el._statusFlags & STATUS_UNINITIALIZED);
+    trimStaleDeps(el);
     clearStatus(el);
     const lane = resolveLane(el as any);
     if (lane) lane._pendingAsync.delete(el);
