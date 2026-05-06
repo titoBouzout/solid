@@ -765,7 +765,7 @@ export function read<T>(el: Signal<T> | Computed<T>): T {
     }
   }
 
-  if (owner._statusFlags & STATUS_PENDING) {
+  if (owner._statusFlags & STATUS_PENDING && !refreshing) {
     if (c && !(stale && owner._transition && activeTransition !== owner._transition)) {
       if (__DEV__ && c && c._config & CONFIG_CHILDREN_FORBIDDEN) {
         const message =

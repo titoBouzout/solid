@@ -303,6 +303,37 @@ describe("createOptimistic", () => {
       expect(result).toBe("Settled");
     });
 
+    it("refreshing an optimistic accessor does not throw upstream pending reads (#2694)", async () => {
+      let sendMessage!: () => void;
+      let optimistic!: () => string;
+      let resolveCount!: (value: string) => void;
+
+      createRoot(() => {
+        const count = createMemo(
+          () =>
+            new Promise<string>(resolve => {
+              resolveCount = resolve;
+            })
+        );
+        const [readOptimistic, setOptimistic] = createOptimistic<string>(() => count());
+        optimistic = readOptimistic;
+        createLoadingBoundary(optimistic, () => "Loading")();
+
+        sendMessage = () => {
+          setOptimistic(() => "Optimistic");
+          expect(() => refresh(optimistic)).not.toThrow();
+        };
+      });
+
+      sendMessage();
+      flush();
+
+      resolveCount("Settled");
+      await Promise.resolve();
+      flush();
+      expect(optimistic()).toBe("Settled");
+    });
+
     it("should hold regular signal value during transition while showing optimistic", async () => {
       const [$regular, setRegular] = createSignal(10);
       const [$optimistic, setOptimistic] = createOptimistic(1);

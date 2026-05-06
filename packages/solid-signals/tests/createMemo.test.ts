@@ -726,6 +726,18 @@ describe("async compute", () => {
     });
   });
 
+  it("refresh() does not throw upstream pending reads from a plain memo (#2694)", () => {
+    let target!: () => number;
+
+    createRoot(() => {
+      const source = createMemo(() => new Promise<number>(() => {}));
+      target = createMemo(() => source() + 1);
+      createLoadingBoundary(target, () => "Loading")();
+    });
+
+    expect(() => refresh(target)).not.toThrow();
+  });
+
   it("should let a manual setSignal write to a memo win over a queued recompute (#2692)", () => {
     const [original, setOriginal, derived, setDerived] = createRoot(() => {
       const [o, setO] = createSignal(0);
