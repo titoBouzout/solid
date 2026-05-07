@@ -1226,6 +1226,18 @@ export function refresh<T>(target: Refreshable<T>): void {
   refreshing = true;
   try {
     const node = (target as any)?.[$REFRESH] as Computed<any> | undefined;
+    if (__DEV__ && !node) {
+      const message =
+        "[INVALID_REFRESH_TARGET] refresh() expects a Solid source accessor or refreshable store. " +
+        "Pass the original source target, not a wrapper function or derived property read.";
+      emitDiagnostic({
+        code: "INVALID_REFRESH_TARGET",
+        kind: "write",
+        severity: "error",
+        message
+      });
+      throw new Error(message);
+    }
     if (node && typeof node._fn === "function" && !(node._flags & REACTIVE_DISPOSED)) {
       recompute(node);
     }

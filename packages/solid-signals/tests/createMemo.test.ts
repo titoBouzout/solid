@@ -737,7 +737,7 @@ describe("async compute", () => {
     expect(() => refresh(target)).not.toThrow();
   });
 
-  it("refresh() does not execute unbranded function wrappers", () => {
+  it("refresh() rejects unbranded function wrappers", () => {
     let wrappedRuns = 0;
     let targetRuns = 0;
     createRoot(() => {
@@ -749,10 +749,12 @@ describe("async compute", () => {
       flush();
       expect(targetRuns).toBe(1);
 
-      refresh((() => {
-        wrappedRuns++;
-        return target();
-      }) as any);
+      expect(() =>
+        refresh((() => {
+          wrappedRuns++;
+          return target();
+        }) as any)
+      ).toThrow("INVALID_REFRESH_TARGET");
       flush();
       expect(wrappedRuns).toBe(0);
       expect(targetRuns).toBe(1);
@@ -765,6 +767,23 @@ describe("async compute", () => {
     expect(() => refresh(count)).not.toThrow();
     flush();
     expect(count()).toBe(0);
+  });
+
+  it("refresh() rejects non-source objects", () => {
+    expect(() => refresh({} as any)).toThrow("INVALID_REFRESH_TARGET");
+  });
+
+  it("refresh() rejects wrapped property reads", () => {
+    const props = { value: 1 };
+    let wrappedRuns = 0;
+
+    expect(() =>
+      refresh((() => {
+        wrappedRuns++;
+        return props.value;
+      }) as any)
+    ).toThrow("INVALID_REFRESH_TARGET");
+    expect(wrappedRuns).toBe(0);
   });
 
   it("should let a manual setSignal write to a memo win over a queued recompute (#2692)", () => {
