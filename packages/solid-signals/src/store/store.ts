@@ -120,8 +120,14 @@ export function createStoreProxy<T extends object>(
   if (Array.isArray(value)) {
     newTarget = [];
     newTarget.v = value;
-  } else newTarget = { v: value };
-  newTarget[STORE_CUSTOM_PROTO] = hasCustomPrototype(unwrapStoreValue(value));
+  } else {
+    newTarget = { v: value };
+    const unwrapped = (value as any)?.[$TARGET]?.[STORE_VALUE] ?? value;
+    const proto = Object.getPrototypeOf(unwrapped);
+    if (proto !== null && proto !== Object.prototype) {
+      newTarget[STORE_CUSTOM_PROTO] = true;
+    }
+  }
   extend && extend(newTarget);
   return (newTarget[$PROXY] = new Proxy(newTarget, traps));
 }
@@ -136,12 +142,10 @@ export function wrap<T extends Record<PropertyKey, any>>(value: T, target?: Stor
 
 export function isWrappable<T>(obj: T | NotWrappable): obj is T;
 export function isWrappable(obj: any) {
-  return (
-    obj != null &&
-    typeof obj === "object" &&
-    !Object.isFrozen(obj) &&
-    !(typeof Node !== "undefined" && obj instanceof Node)
-  );
+  if (obj == null || typeof obj !== "object" || Object.isFrozen(obj)) return false;
+  // Dynamic Node check (kept dynamic so test/SSR overrides of `globalThis.Node`
+  // are observed at call time).
+  return typeof Node === "undefined" || !(obj instanceof Node);
 }
 let writeOverride = false;
 export function setWriteOverride(value: boolean) {
@@ -154,12 +158,6 @@ function writeOnly(proxy: any) {
 
 function unwrapStoreValue(value: any) {
   return value?.[$TARGET]?.[STORE_VALUE] ?? value;
-}
-
-function hasCustomPrototype(value: any): boolean {
-  if (Array.isArray(value)) return false;
-  const proto = Object.getPrototypeOf(value);
-  return proto !== null && proto !== Object.prototype;
 }
 
 function hasInheritedAccessor(source: Record<PropertyKey, any>, property: PropertyKey): boolean {
