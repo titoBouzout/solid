@@ -131,13 +131,15 @@ export function lazy<T extends Component<any>>(
     }
 
     let Comp: T | undefined;
-    return createMemo(() =>
-      (Comp = comp!())
-        ? untrack(() => {
-            if (IS_DEV) Object.assign(Comp!, { [$DEVCOMP]: true });
-            return Comp!(props);
-          })
-        : ""
+    return createMemo(
+      () =>
+        (Comp = comp!())
+          ? untrack(() => {
+              if (IS_DEV) Object.assign(Comp!, { [$DEVCOMP]: true });
+              return Comp!(props);
+            })
+          : "",
+      { sync: true }
     ) as unknown as SolidElement;
   }) as T;
   wrap.preload = () => p || ((p = fn()).then(mod => (comp = () => mod.default)), p);

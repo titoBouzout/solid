@@ -1,12 +1,4 @@
-import {
-  createMemo,
-  createRoot,
-  setContext,
-  getContext,
-  flatten,
-  getOwner,
-  runWithOwner
-} from "./signals.js";
+import { createMemo, createRoot, setContext, getContext, flatten } from "./signals.js";
 import type { Accessor, EffectOptions } from "./signals.js";
 import type { ArrayElement, Element as SolidElement } from "../types.js";
 import type { FlowComponent, FlowProps } from "./component.js";
@@ -69,27 +61,16 @@ export type ChildrenReturn = Accessor<ResolvedChildren> & { toArray: () => Resol
  */
 export function children(fn: Accessor<SolidElement>): ChildrenReturn {
   const c = createMemo(fn, { lazy: true });
+  // Outer memo body just calls flatten(c()) — guaranteed sync, even though
+  // c() can throw NotReadyError up to the caller. (sync option from compiler
+  // contract: result is never a Promise/AsyncIterable.)
   const memo = createMemo(() => flatten(c()), {
-    lazy: true
+    lazy: true,
+    sync: true
   }) as unknown as ChildrenReturn;
   memo.toArray = () => {
     const v = memo();
     return Array.isArray(v) ? v : v != null ? [v] : [];
   };
   return memo;
-}
-
-/**
- * Pass-through for SSR dynamic expressions.
- * On the client, insert() render effects are transparent (0 owner slots),
- * so the server doesn't need to create owners for these either.
- */
-export function ssrRunInScope(fn: () => any): () => any;
-export function ssrRunInScope(array: (() => any)[]): (() => any)[];
-export function ssrRunInScope(fn: (() => any) | (() => any)[]): (() => any) | (() => any)[] {
-  const owner = getOwner();
-  if (!owner) return fn;
-  return Array.isArray(fn)
-    ? fn.map(hole => () => runWithOwner(owner, hole))
-    : () => runWithOwner(owner, fn);
 }

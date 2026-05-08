@@ -9,8 +9,7 @@ export {
   untrack,
   merge as mergeProps,
   flatten,
-  ssrHandleError,
-  ssrRunInScope
+  ssrHandleError
 } from "solid-js";
 
 const transparentOptions = { transparent: true, sync: true };

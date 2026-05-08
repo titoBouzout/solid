@@ -5,18 +5,16 @@ import { $REFRESH } from "@solidjs/signals";
 export { $REFRESH };
 
 // === Re-exports from @solidjs/signals (infrastructure — no reactive scheduling) ===
+//
+// Owner runtime (`createOwner`, `runWithOwner`, `getOwner`, `isDisposed`,
+// `onCleanup`, `getNextChildId`, `createContext`, `setContext`, `getContext`,
+// `createRoot`) is implemented locally below. The upstream owner carries
+// scheduler / heap / zombie / dev-mode metadata that SSR doesn't need — the
+// lean SSR owner is a forward-only linked list with cleanup hooks and an id.
+//
+// Errors and pure-utility surface stays imported from upstream.
 
 export {
-  createRoot,
-  createOwner,
-  runWithOwner,
-  getOwner,
-  isDisposed,
-  onCleanup,
-  getNextChildId,
-  createContext,
-  setContext,
-  getContext,
   NotReadyError,
   NoOwnerError,
   ContextNotFoundError,
@@ -72,17 +70,7 @@ export type {
 
 // === Local imports ===
 
-import {
-  createOwner,
-  getOwner,
-  getNextChildId,
-  setContext,
-  getContext,
-  isWrappable,
-  NotReadyError,
-  runWithOwner,
-  onCleanup
-} from "@solidjs/signals";
+import { isWrappable, NotReadyError, NoOwnerError, ContextNotFoundError } from "@solidjs/signals";
 
 import type {
   Accessor,
@@ -101,6 +89,241 @@ import type {
 } from "@solidjs/signals";
 
 import { sharedConfig, NoHydrateContext } from "./shared.js";
+
+// === Lean SSR Owner Runtime ===
+//
+// SSR is single-pass and pull-based: there is no scheduler, no heap, no
+// zombie/check graph, no observer link list. We replace the upstream owner
+// runtime with a minimal forward-only linked list that supports just what
+// SSR needs:
+//
+//   * id allocation (for hydration plumbing) + transparent ancestor walk
+//   * onCleanup hooks (used by boundary retry in `createErrorBoundary`)
+//   * context lookup via lazily-cloned record (matches upstream semantics)
+//   * runWithOwner / getOwner / isDisposed / createRoot
+//
+// Compared to the upstream `Owner` shape (~14 fields), `SSROwner` carries 9
+// — no `_queue`, `_pendingDisposal`, `_pendingFirstChild`, `_prevSibling`,
+// `_config`, `_snapshotScope`, `_flags`. Smaller object → less per-render
+// allocation and faster GC.
+
+type Disposable = () => void;
+
+interface SSROwner {
+  id?: string;
+  _transparent: boolean;
+  _disposal: Disposable | Disposable[] | null;
+  _parent: SSROwner | null;
+  _context: Record<symbol | string, unknown>;
+  _childCount: number;
+  _firstChild: SSROwner | null;
+  _nextSibling: SSROwner | null;
+  _disposed: boolean;
+}
+
+const defaultSSRContext: Record<symbol | string, unknown> = {};
+
+let currentOwner: SSROwner | null = null;
+
+// SSR owner pool. SSR disposes the entire owner tree at end-of-render via
+// `createRoot`'s dispose hook, so we can reclaim every owner back into a
+// freelist for the next render. Pooling moves steady-state owner allocation
+// from O(owners-per-render) down to ~0 for repeat renders of the same shape.
+//
+// Capped to bound memory; oversize bursts (e.g. one-shot 100k row render)
+// just re-allocate beyond the cap.
+const OWNER_POOL_MAX = 4096;
+const ownerPool: SSROwner[] = [];
+
+function formatChildId(prefix: string, id: number): string {
+  const num = id.toString(36);
+  const len = num.length - 1;
+  return prefix + (len ? String.fromCharCode(64 + len) : "") + num;
+}
+
+function nextChildIdFor(owner: SSROwner, consume: boolean): string {
+  let counter = owner;
+  while (counter._transparent && counter._parent) counter = counter._parent;
+  if (counter.id != null) {
+    return formatChildId(counter.id, consume ? counter._childCount++ : counter._childCount);
+  }
+  throw new Error("Cannot get child id from owner without an id");
+}
+
+export function getNextChildId(owner: Owner): string {
+  return nextChildIdFor(owner as unknown as SSROwner, true);
+}
+
+export function createOwner(options?: { id?: string; transparent?: boolean }): Owner {
+  const parent = currentOwner;
+  const transparent = options?.transparent ?? false;
+  const id =
+    options?.id ??
+    (transparent ? parent?.id : parent?.id != null ? nextChildIdFor(parent, true) : undefined);
+  const ctx = parent?._context ?? defaultSSRContext;
+  let owner: SSROwner;
+  if (ownerPool.length) {
+    // Reuse a recycled owner. Reset all fields so the hidden class stays
+    // monomorphic and we don't carry stale references. (Allocation is the
+    // hot path — re-initializing 9 slots is much cheaper than `new`.)
+    owner = ownerPool.pop()!;
+    owner.id = id;
+    owner._transparent = transparent;
+    owner._disposal = null;
+    owner._parent = parent;
+    owner._context = ctx;
+    owner._childCount = 0;
+    owner._firstChild = null;
+    owner._nextSibling = null;
+    owner._disposed = false;
+  } else {
+    owner = {
+      id,
+      _transparent: transparent,
+      _disposal: null,
+      _parent: parent,
+      _context: ctx,
+      _childCount: 0,
+      _firstChild: null,
+      _nextSibling: null,
+      _disposed: false
+    };
+  }
+  if (parent) {
+    // Forward-only linked list. We push at head; iteration during disposal
+    // walks `_firstChild` -> `_nextSibling`. SSR doesn't depend on sibling
+    // order — only the bag of children, which is fully covered.
+    const lastChild = parent._firstChild;
+    if (lastChild) owner._nextSibling = lastChild;
+    parent._firstChild = owner;
+  }
+  return owner as unknown as Owner;
+}
+
+export function runWithOwner<T>(owner: Owner | null, fn: () => T): T {
+  const prev = currentOwner;
+  currentOwner = owner as unknown as SSROwner | null;
+  try {
+    return fn();
+  } finally {
+    currentOwner = prev;
+  }
+}
+
+export function getOwner(): Owner | null {
+  return currentOwner as unknown as Owner | null;
+}
+
+export function isDisposed(owner: Owner): boolean {
+  return (owner as unknown as SSROwner)._disposed;
+}
+
+export function onCleanup(fn: Disposable): Disposable {
+  const o = currentOwner;
+  if (!o) return fn;
+  if (!o._disposal) o._disposal = fn;
+  else if (Array.isArray(o._disposal)) o._disposal.push(fn);
+  else o._disposal = [o._disposal, fn];
+  return fn;
+}
+
+export function createContext<T>(defaultValue?: T, description?: string): Context<T> {
+  return { id: Symbol(description), defaultValue };
+}
+
+export function getContext<T>(
+  context: Context<T>,
+  owner: Owner | null = currentOwner as unknown as Owner | null
+): T {
+  if (!owner) throw new NoOwnerError();
+  const map = (owner as unknown as SSROwner)._context;
+  const stored = map[context.id];
+  const value = stored !== undefined ? (stored as T) : context.defaultValue;
+  if (value === undefined) throw new ContextNotFoundError();
+  return value as T;
+}
+
+export function setContext<T>(
+  context: Context<T>,
+  value?: T,
+  owner: Owner | null = currentOwner as unknown as Owner | null
+): void {
+  if (!owner) throw new NoOwnerError();
+  const o = owner as unknown as SSROwner;
+  // Clone (matches upstream): without this, a child's setContext would leak
+  // back into the parent's _context map.
+  o._context = {
+    ...o._context,
+    [context.id]: value === undefined ? context.defaultValue : value
+  };
+}
+
+/**
+ * Tears down `owner` (optionally) and all of its descendants. Walks the
+ * forward-only `_firstChild` -> `_nextSibling` chain, recursively disposing
+ * each child with `self=true`, then runs the owner's own `_disposal` queue
+ * and resets `_firstChild` / `_childCount`.
+ *
+ * `self=false` keeps `owner` itself alive (its `_disposed` flag stays clear,
+ * future `runWithOwner(owner, ...)` keeps working) but tears down its
+ * subtree. This is what `createErrorBoundary` and `createLoadingBoundary`
+ * use on retry — wipe the children, keep the boundary owner around for the
+ * re-run.
+ *
+ * @internal
+ */
+export function disposeOwner(owner: Owner, self: boolean = true): void {
+  const node = owner as unknown as SSROwner;
+  if (node._disposed) return;
+  // Leaf fast path: no children, no cleanup. Most For/Repeat row owners
+  // hit this — `<li>` row bodies don't onCleanup and don't spawn nested
+  // owners. Skips the recursion stack frame and the work-detection branches.
+  if (!node._firstChild && !node._disposal) {
+    if (self) {
+      node._disposed = true;
+      if (ownerPool.length < OWNER_POOL_MAX) {
+        node._parent = null;
+        node._nextSibling = null;
+        ownerPool.push(node);
+      }
+    }
+    return;
+  }
+  if (self) node._disposed = true;
+  let child = node._firstChild;
+  while (child) {
+    const next = child._nextSibling;
+    disposeOwner(child as unknown as Owner, true);
+    child = next;
+  }
+  node._firstChild = null;
+  node._childCount = 0;
+  const d = node._disposal;
+  if (d) {
+    if (Array.isArray(d)) {
+      for (let i = 0, len = d.length; i < len; i++) d[i]();
+    } else {
+      d();
+    }
+    node._disposal = null;
+  }
+  // Recycle the disposed owner. Skip the root case (`self=false`) and the
+  // already-pooled case so we don't double-add. The next `createOwner` will
+  // overwrite all fields, so we only need to drop heavy references here.
+  if (self && ownerPool.length < OWNER_POOL_MAX) {
+    node._parent = null;
+    node._nextSibling = null;
+    ownerPool.push(node);
+  }
+}
+
+export function createRoot<T>(
+  init: ((dispose: () => void) => T) | (() => T),
+  options?: { id?: string; transparent?: boolean }
+): T {
+  const owner = createOwner(options);
+  return runWithOwner(owner, () => init(() => disposeOwner(owner)));
+}
 
 // === Observer tracking (for async memo) ===
 
@@ -267,6 +490,18 @@ export function createMemo<T>(
   compute: ComputeFunction<undefined | NoInfer<T>, T>,
   options?: ServerClientMemoOptions<T> | ServerMemoOptions<T>
 ): SourceAccessor<T | undefined> {
+  // Sync fast path — set by the compiler-emitted `_$memo()` / `_$effect()`
+  // wrappers (see `solid-web/src/core.ts`) and by internal control-flow
+  // primitives (mapArray, repeat, Show, Switch, children, lazy). These
+  // computes are statically guaranteed never to return a Promise /
+  // AsyncIterable, so we skip the full async-aware ServerComputation /
+  // processResult / $REFRESH / runWithObserver / onCleanup scaffolding.
+  // They CAN still throw `NotReadyError`; that propagates to the nearest
+  // boundary on read, which is exactly the same behaviour the boundary
+  // already drives via re-discovery — no per-memo retry subscription needed.
+  if (options?.sync) {
+    return createSyncMemo(compute, options);
+  }
   // Capture SSR context at creation time — async re-computations (via .then callbacks)
   // may run after a concurrent request has overwritten sharedConfig.context.
   const ctx = sharedConfig.context;
@@ -325,6 +560,84 @@ export function createMemo<T>(
   }) as SourceAccessor<T | undefined>;
   (read as any)[$REFRESH] = comp;
   return read;
+}
+
+/**
+ * Lean SSR memo for computes statically guaranteed to return synchronously
+ * (no Promise / AsyncIterable result).
+ *
+ * Used by:
+ *   - the compiler-emitted `_$memo()` / `_$effect()` wrappers
+ *     (`solid-web/src/core.ts`)
+ *   - internal control-flow primitives (mapArray, repeat, Show, Switch,
+ *     children flatten, lazy outer)
+ *
+ * Architecture note: SSR retry is owned by the streaming engine, not the
+ * memo. When a hole pulls and the body throws `NotReadyError`, the engine
+ * pushes the hole back into `result.h`/`result.p` and re-pulls when the
+ * source promise resolves (see `resolveSSRNode` in dom-expressions). So
+ * we just don't latch a pending result — the next pull recomputes.
+ *
+ * Caches:
+ *   - successful values (deduplicates re-reads inside one render walk)
+ *   - real errors (engine surfaces these via `ssrHandleError`)
+ *
+ * Does NOT support (by design — sync memos don't sit on these surfaces):
+ *   - `ssrSource` / hybrid client-server hints (those imply async data)
+ *   - `equals` / observation (no subscriber graph on the server)
+ *   - `$REFRESH` / async refresh subscriber path
+ *
+ * Honored options: `lazy` (defer compute until first read).
+ */
+function createSyncMemo<T>(
+  compute: ComputeFunction<undefined | NoInfer<T>, T>,
+  options?: ServerMemoOptions<T> | ServerClientMemoOptions<T>
+): SourceAccessor<T | undefined> {
+  const owner = createOwner();
+  let value: T | undefined;
+  let error: unknown;
+  // True iff the next read should return cached state (success or real error).
+  // Stays false while `value` reflects a previous successful run AND a later
+  // pull is needed (initial: never run; after `NotReadyError`: needs retry).
+  let cached = false;
+
+  function pull(): T | undefined {
+    // Inlined `runWithOwner` — avoids the per-pull `() => compute(value)`
+    // closure alloc that `runWithOwner(owner, fn)` would force. Hot for the
+    // compiler-emitted `_$memo()` ternary wrap on conditional JSX, where one
+    // memo + one pull is paid per row.
+    const prev = currentOwner;
+    currentOwner = owner as unknown as SSROwner;
+    try {
+      value = compute(value) as T;
+      error = undefined;
+      cached = true;
+      return value;
+    } catch (err) {
+      if (err instanceof NotReadyError) throw err; // don't latch — engine re-pulls
+      error = err;
+      cached = true;
+      throw err;
+    } finally {
+      currentOwner = prev;
+    }
+  }
+
+  if (!options?.lazy) {
+    try {
+      pull();
+    } catch {
+      /* error/pending already recorded on `cached`/`error`; surface on read */
+    }
+  }
+
+  return (() => {
+    if (cached) {
+      if (error !== undefined) throw error;
+      return value;
+    }
+    return pull();
+  }) as SourceAccessor<T | undefined>;
 }
 
 // === Deep Proxy for Patch Tracking (projections with async iterables) ===
@@ -936,34 +1249,59 @@ export function mapArray<T, U>(
   mapFn: (v: Accessor<T>, i: Accessor<number>) => U,
   options: { keyed?: boolean | ((item: T) => any); fallback?: Accessor<any> } = {}
 ): () => U[] {
-  const parent = createOwner();
-  return createMemo(() => {
-    const items = list();
-    let s: U[] = [];
-    if (items && items.length) {
-      runWithOwner(parent, () => {
-        for (let i = 0, len = items.length; i < len; i++) {
-          const o = createOwner();
-          s.push(
-            runWithOwner(o, () =>
+  // SSR-only optimization: rows reuse the memo owner — no per-row owner
+  // allocation, no per-row linked-list link, no per-row dispose walk.
+  //
+  // Per-row id parity with the client is preserved by *mutating* the memo
+  // owner's `id` and resetting `_childCount` for each iteration. Any nested
+  // `createOwner` (compiler-emitted memos, providers, boundaries) under the
+  // row sees the synthetic row id as its parent prefix — the exact id the
+  // client produces from its real per-row owner. After the loop, the memo
+  // owner is restored and `_childCount` is advanced so siblings after `<For>`
+  // pick up the right next id.
+  //
+  // Safe because:
+  //  * `mapFn` runs once per render — never re-runs in isolation. Any sync
+  //    `NotReadyError` propagates up through this `sync: true` createMemo
+  //    (which doesn't latch) and the engine reruns the whole `mapArray` with
+  //    fresh state.
+  //  * Async retries always live in their own nested owners (compiler-emitted
+  //    sync memos, `_$memo()`, boundaries). Their ids and captured state are
+  //    snapshotted at owner-creation time, so restoring `parent.id` afterwards
+  //    doesn't disturb them.
+  return createMemo(
+    () => {
+      const items = list();
+      const s: U[] = [];
+      if (items && items.length) {
+        const parent = currentOwner!;
+        const origId = parent.id;
+        const origChildCount = parent._childCount;
+        try {
+          for (let i = 0, len = items.length; i < len; i++) {
+            if (origId !== undefined) {
+              parent.id = formatChildId(origId, origChildCount + i);
+            }
+            parent._childCount = 0;
+            s.push(
               mapFn(
                 () => items[i],
                 () => i
               )
-            )
-          );
+            );
+          }
+        } finally {
+          parent.id = origId;
+          parent._childCount = origChildCount + items.length;
         }
-      });
-    } else if (options.fallback) {
-      s = [
-        runWithOwner(parent, () => {
-          const fo = createOwner();
-          return runWithOwner(fo, () => options.fallback!()) as U;
-        })
-      ];
-    }
-    return s;
-  });
+      } else if (options.fallback) {
+        const fo = createOwner();
+        s.push(runWithOwner(fo, () => options.fallback!()) as U);
+      }
+      return s;
+    },
+    { sync: true }
+  );
 }
 
 export function repeat<T>(
@@ -971,26 +1309,36 @@ export function repeat<T>(
   mapFn: (i: number) => T,
   options: { fallback?: Accessor<any>; from?: Accessor<number | undefined> } = {}
 ): () => T[] {
-  const owner = createOwner();
-  return createMemo(() => {
-    const len = count();
-    const offset = options.from?.() || 0;
-    if (!len) {
-      if (!options.fallback) return [];
-      return [
-        runWithOwner(owner, () => {
-          const fallbackOwner = createOwner();
-          return runWithOwner(fallbackOwner, () => options.fallback!()) as T;
-        }) as T
-      ];
-    }
-    return runWithOwner(owner, () =>
-      Array.from({ length: len }, (_, i) => {
-        const itemOwner = createOwner();
-        return runWithOwner(itemOwner, () => mapFn(i + offset)) as T;
-      })
-    );
-  });
+  // See mapArray — same per-row owner elision via id mutation.
+  return createMemo(
+    () => {
+      const len = count();
+      const offset = options.from?.() || 0;
+      if (!len) {
+        if (!options.fallback) return [];
+        const fo = createOwner();
+        return [runWithOwner(fo, () => options.fallback!()) as T];
+      }
+      const out: T[] = new Array(len);
+      const parent = currentOwner!;
+      const origId = parent.id;
+      const origChildCount = parent._childCount;
+      try {
+        for (let i = 0; i < len; i++) {
+          if (origId !== undefined) {
+            parent.id = formatChildId(origId, origChildCount + i);
+          }
+          parent._childCount = 0;
+          out[i] = mapFn(i + offset);
+        }
+      } finally {
+        parent.id = origId;
+        parent._childCount = origChildCount + len;
+      }
+      return out;
+    },
+    { sync: true }
+  );
 }
 
 // === Boundary primitives ===
@@ -1061,7 +1409,7 @@ export function createErrorBoundary<U>(
   return () => {
     let result: any;
     let handled = false;
-    if (ctx) owner.dispose(false);
+    if (ctx) disposeOwner(owner, false);
     try {
       result = ctx
         ? runWithBoundaryErrorContext(owner, resolve, err => {

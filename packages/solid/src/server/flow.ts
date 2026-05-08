@@ -80,17 +80,20 @@ export function Show<T, F extends ConditionalRenderCallback<T>>(props: {
     getNextChildId(o); // match client's conditionValue memo
     if (!props.keyed) getNextChildId(o); // match client's condition memo (non-keyed only)
   }
-  return createMemo(() => {
-    const when = props.when;
-    if (when) {
-      const child = props.children;
-      if (typeof child === "function" && child.length > 0) {
-        return (child as any)(() => when as NonNullable<T>);
+  return createMemo(
+    () => {
+      const when = props.when;
+      if (when) {
+        const child = props.children;
+        if (typeof child === "function" && child.length > 0) {
+          return (child as any)(() => when as NonNullable<T>);
+        }
+        return child as SolidElement;
       }
-      return child as SolidElement;
-    }
-    return props.fallback as SolidElement;
-  }) as unknown as SolidElement;
+      return props.fallback as SolidElement;
+    },
+    { sync: true }
+  ) as unknown as SolidElement;
 }
 
 type EvalConditions = readonly [number, unknown, MatchProps<unknown>];
@@ -104,19 +107,22 @@ export function Switch(props: { fallback?: SolidElement; children: SolidElement 
   const o = getOwner();
   if (o?.id != null) getNextChildId(o); // advance ID counter
 
-  return createMemo(() => {
-    let conds: MatchProps<unknown> | MatchProps<unknown>[] = chs() as any;
-    if (!Array.isArray(conds)) conds = [conds];
+  return createMemo(
+    () => {
+      let conds: MatchProps<unknown> | MatchProps<unknown>[] = chs() as any;
+      if (!Array.isArray(conds)) conds = [conds];
 
-    for (let i = 0; i < conds.length; i++) {
-      const w = conds[i].when;
-      if (w) {
-        const c = conds[i].children;
-        return typeof c === "function" && c.length > 0 ? (c as any)(() => w) : c;
+      for (let i = 0; i < conds.length; i++) {
+        const w = conds[i].when;
+        if (w) {
+          const c = conds[i].children;
+          return typeof c === "function" && c.length > 0 ? (c as any)(() => w) : c;
+        }
       }
-    }
-    return props.fallback;
-  }) as unknown as SolidElement;
+      return props.fallback;
+    },
+    { sync: true }
+  ) as unknown as SolidElement;
 }
 
 export type MatchProps<T, F extends ConditionalRenderCallback<T> = ConditionalRenderCallback<T>> = {

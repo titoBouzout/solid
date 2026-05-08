@@ -109,10 +109,17 @@ export function Show<T, F extends ConditionalRenderCallback<T>>(props: {
   children: ConditionalRenderChildren<T, F>;
 }): SolidElement {
   const keyed = props.keyed;
+  // `props.when` is user input — may be a pending async read. Keep this memo
+  // async-shape aware (no `sync: true`) so a Promise/AsyncIterable returned by
+  // the user's reactive expression flows through `handleAsync`.
   const conditionValue = createMemo<T | undefined | null | boolean>(
     () => props.when,
     IS_DEV ? { name: "condition value" } : undefined
   );
+  // `condition` and the outer value memo only consume `conditionValue()` and
+  // pick a child / fallback. Their bodies are statically synchronous (they
+  // never return a Promise / AsyncIterable), so `sync: true` skips the
+  // per-recompute async-shape probe in `recompute`.
   const condition = keyed
     ? conditionValue
     : createMemo(
@@ -120,9 +127,10 @@ export function Show<T, F extends ConditionalRenderCallback<T>>(props: {
         IS_DEV
           ? {
               equals: (a, b) => !a === !b,
-              name: "condition"
+              name: "condition",
+              sync: true
             }
-          : { equals: (a, b) => !a === !b }
+          : { equals: (a, b) => !a === !b, sync: true }
       );
   return createMemo(
     () => {
@@ -143,7 +151,7 @@ export function Show<T, F extends ConditionalRenderCallback<T>>(props: {
       }
       return props.fallback;
     },
-    IS_DEV ? { name: "value" } : undefined
+    IS_DEV ? { name: "value", sync: true } : { sync: true }
   ) as unknown as SolidElement;
 }
 
@@ -170,32 +178,40 @@ type EvalConditions = readonly [number, Accessor<unknown>, MatchProps<unknown>];
  */
 export function Switch(props: { fallback?: SolidElement; children: SolidElement }): SolidElement {
   const chs = children(() => props.children);
-  const switchFunc = createMemo(() => {
-    const mps = chs.toArray() as unknown as MatchProps<unknown>[];
-    let func: Accessor<EvalConditions | undefined> = () => undefined;
-    for (let i = 0; i < mps.length; i++) {
-      const index = i;
-      const mp = mps[i];
-      const prevFunc = func;
-      const conditionValue = createMemo(
-        () => (prevFunc() ? undefined : mp.when),
-        IS_DEV ? { name: "condition value" } : undefined
-      );
-      const condition = mp.keyed
-        ? conditionValue
-        : createMemo(
-            conditionValue,
-            IS_DEV
-              ? {
-                  equals: (a, b) => !a === !b,
-                  name: "condition"
-                }
-              : { equals: (a, b) => !a === !b }
-          );
-      func = () => prevFunc() || (condition() ? [index, conditionValue, mp] : undefined);
-    }
-    return func;
-  });
+  // `switchFunc` body just walks `chs.toArray()` and builds a selector
+  // function. Synchronous by construction.
+  const switchFunc = createMemo<Accessor<EvalConditions | undefined>>(
+    () => {
+      const mps = chs.toArray() as unknown as MatchProps<unknown>[];
+      let func: Accessor<EvalConditions | undefined> = () => undefined;
+      for (let i = 0; i < mps.length; i++) {
+        const index = i;
+        const mp = mps[i];
+        const prevFunc = func;
+        // Per-match `mp.when` is user input — keep async-shape aware.
+        const conditionValue = createMemo(
+          () => (prevFunc() ? undefined : mp.when),
+          IS_DEV ? { name: "condition value" } : undefined
+        );
+        // Stale-protection wrapper. Body is sync; just normalises identity.
+        const condition = mp.keyed
+          ? conditionValue
+          : createMemo(
+              conditionValue,
+              IS_DEV
+                ? {
+                    equals: (a, b) => !a === !b,
+                    name: "condition",
+                    sync: true
+                  }
+                : { equals: (a, b) => !a === !b, sync: true }
+            );
+        func = () => prevFunc() || (condition() ? [index, conditionValue, mp] : undefined);
+      }
+      return func;
+    },
+    { sync: true }
+  );
   return createMemo(
     () => {
       const sel = switchFunc()();
@@ -214,7 +230,7 @@ export function Switch(props: { fallback?: SolidElement; children: SolidElement 
           )
         : child;
     },
-    IS_DEV ? { name: "eval conditions" } : undefined
+    IS_DEV ? { name: "eval conditions", sync: true } : { sync: true }
   ) as unknown as SolidElement;
 }
 

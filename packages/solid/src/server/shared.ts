@@ -1,7 +1,9 @@
-import { getOwner, getNextChildId, getContext } from "@solidjs/signals";
-import type { Context } from "@solidjs/signals";
+import { getOwner, getNextChildId, getContext } from "./signals.js";
+import type { Context } from "./signals.js";
 
-export type SSRTemplateObject = { t: string[]; h: Function[]; p: Promise<any>[] };
+export type SSRTemplateObject =
+  | { t: string[]; h: Function[]; p: Promise<any>[] }
+  | { t: string; h?: undefined; p?: undefined };
 
 export type HydrationContext = {
   id: string;

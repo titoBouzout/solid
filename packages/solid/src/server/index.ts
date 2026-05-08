@@ -80,7 +80,7 @@ export type {
 } from "./signals.js";
 
 // Wrappers — context, children, dev symbols
-export { $DEVCOMP, children, createContext, useContext, ssrRunInScope } from "./core.js";
+export { $DEVCOMP, children, createContext, useContext } from "./core.js";
 export type {
   ChildrenReturn,
   Context,

@@ -10,8 +10,7 @@ import {
   Errored,
   Loading,
   getOwner,
-  mapArray,
-  ssrRunInScope
+  mapArray
 } from "../../src/server/index.js";
 
 describe("Server For", () => {
@@ -324,7 +323,6 @@ describe("Hydration key alignment", () => {
 
 // Transparent insert effect alignment tests
 // On the client, insert() render effects are transparent (0 owner slots).
-// ssrRunInScope must also consume 0 slots to match.
 // Show must return an accessor (function) like the client.
 describe("Transparent insert effect alignment", () => {
   test("Show returns an accessor function matching client behavior", () => {
@@ -349,80 +347,11 @@ describe("Transparent insert effect alignment", () => {
     );
   });
 
-  test("ssrRunInScope does not consume parent owner slots", () => {
-    createRoot(
-      () => {
-        ssrRunInScope(() => "dynamic value");
-
-        let showChildId: string | undefined;
-        Show({
-          when: true,
-          get children() {
-            showChildId = (getOwner() as any)?.id;
-            return "content";
-          }
-        });
-
-        // Show: conditionValue(t0), condition(t1), value memo(t2)
-        expect(showChildId).toBe("t2");
-      },
-      { id: "t" }
-    );
-  });
-
-  test("ssrRunInScope array form does not consume parent slots", () => {
-    createRoot(
-      () => {
-        ssrRunInScope([() => "a", () => "b"]);
-
-        let showChildId: string | undefined;
-        Show({
-          when: true,
-          get children() {
-            showChildId = (getOwner() as any)?.id;
-            return "content";
-          }
-        });
-
-        // Show starts at slot 0: conditionValue(t0), condition(t1), value memo(t2)
-        expect(showChildId).toBe("t2");
-      },
-      { id: "t" }
-    );
-  });
-
-  test("multiple ssrRunInScope calls do not accumulate slots", () => {
-    createRoot(
-      () => {
-        ssrRunInScope(() => "first dynamic");
-        ssrRunInScope(() => "second dynamic");
-        ssrRunInScope(() => "third dynamic");
-
-        let showChildId: string | undefined;
-        Show({
-          when: true,
-          get children() {
-            showChildId = (getOwner() as any)?.id;
-            return "content";
-          }
-        });
-
-        // All three ssrRunInScope calls should consume 0 slots total.
-        // Show: conditionValue(t0), condition(t1), value memo(t2)
-        expect(showChildId).toBe("t2");
-      },
-      { id: "t" }
-    );
-  });
-
-  test("flow components as siblings — IDs unaffected by dynamic expressions", () => {
+  test("flow components as siblings — IDs are sequential", () => {
     createRoot(
       () => {
         let firstShowChildId: string | undefined;
         let secondShowChildId: string | undefined;
-
-        // Dynamic expression between two Shows
-        ssrRunInScope(() => "dynamic before");
 
         Show({
           when: true,
@@ -432,8 +361,6 @@ describe("Transparent insert effect alignment", () => {
           }
         });
 
-        ssrRunInScope(() => "dynamic between");
-
         Show({
           when: true,
           get children() {
@@ -442,7 +369,6 @@ describe("Transparent insert effect alignment", () => {
           }
         });
 
-        // With pass-through ssrRunInScope (0 slots each):
         // First Show: conditionValue(t0), condition(t1), value memo(t2)
         // Second Show: conditionValue(t3), condition(t4), value memo(t5)
         expect(firstShowChildId).toBe("t2");

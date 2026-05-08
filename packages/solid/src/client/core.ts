@@ -169,10 +169,14 @@ export type ChildrenReturn = Accessor<ResolvedChildren> & { toArray: () => Resol
  * @description https://docs.solidjs.com/reference/component-apis/children
  */
 export function children(fn: Accessor<SolidElement>): ChildrenReturn {
+  // `fn` is the user's children expression — may resolve to async values, so
+  // this memo stays async-shape aware (no `sync: true`).
   const c = createMemo(fn, { lazy: true });
+  // Outer memo body is just `flatten(c())` — statically synchronous. `c()`
+  // can throw NotReadyError, but that propagates regardless of `sync`.
   const memo = createMemo(
     () => flatten(c()),
-    IS_DEV ? { name: "children", lazy: true } : { lazy: true }
+    IS_DEV ? { name: "children", lazy: true, sync: true } : { lazy: true, sync: true }
   ) as unknown as ChildrenReturn;
   memo.toArray = () => {
     const v = memo();

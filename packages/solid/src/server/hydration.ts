@@ -1,5 +1,6 @@
 import {
   createOwner,
+  disposeOwner,
   getOwner,
   runWithOwner,
   createLoadingBoundary as coreLoadingBoundary,
@@ -144,7 +145,7 @@ export function createLoadingBoundary(
   }
 
   function runDiscovery(): SSRTemplateObject | undefined {
-    o.dispose(false);
+    disposeOwner(o, false);
     serializeBuffer = [];
     retryPromise = undefined;
     return runLoadingPhase(() => {
@@ -194,12 +195,13 @@ export function createLoadingBoundary(
           ret = runDiscovery();
         }
         commitBoundaryState();
-        while (ret!.p.length) {
-          await Promise.all(ret!.p).catch(() => {});
-          ret = runLoadingPhase(() => ctx.ssr(ret!.t, ...ret!.h)) as any;
+        while (ret && ret.p && ret.p.length) {
+          const pending = ret as { t: string[]; h: Function[]; p: Promise<any>[] };
+          await Promise.all(pending.p).catch(() => {});
+          ret = runLoadingPhase(() => ctx.ssr(pending.t, ...pending.h)) as any;
         }
         flushSerializeBuffer();
-        done!(ret!.t[0]);
+        done!(ret && Array.isArray(ret.t) ? ret.t[0] : ((ret && ret.t) as any));
         if (revealGroup) revealGroup.onResolved(id);
       } catch (err) {
         finalizeError(err);

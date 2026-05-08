@@ -126,10 +126,13 @@ export function lazy<T extends Component<any>>(
         })
       );
     }
-    return createMemo(() => {
-      if (!p.v) throw new NotReadyError(p);
-      return p.v(props);
-    }) as unknown as SolidElement;
+    return createMemo(
+      () => {
+        if (!p.v) throw new NotReadyError(p);
+        return p.v(props);
+      },
+      { sync: true }
+    ) as unknown as SolidElement;
   };
   wrap.preload = load;
   wrap.moduleUrl = moduleUrl;

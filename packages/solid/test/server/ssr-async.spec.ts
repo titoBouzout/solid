@@ -10,8 +10,7 @@ import {
   For,
   Repeat,
   Show,
-  Errored,
-  ssrRunInScope
+  Errored
 } from "../../src/server/index.js";
 import { ssrHandleError } from "../../src/server/hydration.js";
 import { Loading } from "../../src/server/flow.js";
@@ -976,10 +975,7 @@ describe("Loading SSR Async", () => {
                 fallback: "Error caught!",
                 get children() {
                   const data = createMemo(() => d.promise);
-                  return ssr(
-                    ["<div>", "</div>"],
-                    ssrRunInScope(() => data())
-                  ) as any;
+                  return ssr(["<div>", "</div>"], () => data()) as any;
                 }
               }) as any;
             }
@@ -1028,10 +1024,7 @@ describe("Loading SSR Async", () => {
                 fallback: "Loading..." as any,
                 get children() {
                   const data = createMemo(() => d.promise);
-                  return ssr(
-                    ["<div>", "</div>"],
-                    ssrRunInScope(() => data())
-                  ) as any;
+                  return ssr(["<div>", "</div>"], () => data()) as any;
                 }
               }) as any;
             }
@@ -1081,10 +1074,7 @@ describe("Loading SSR Async", () => {
                 fallback: "Loading..." as any,
                 get children() {
                   const data = createMemo(() => d.promise);
-                  return ssr(
-                    ["<div>", "</div>"],
-                    ssrRunInScope(() => data())
-                  ) as any;
+                  return ssr(["<div>", "</div>"], () => data()) as any;
                 }
               }) as any;
             }
@@ -1127,10 +1117,7 @@ describe("Loading SSR Async", () => {
                 return Errored({
                   fallback: (e: any) => `ItemError: ${String(e.message || e)}`,
                   get children() {
-                    return ssr(
-                      ["<div>", "</div>"],
-                      ssrRunInScope(() => item().title)
-                    ) as any;
+                    return ssr(["<div>", "</div>"], () => item().title) as any;
                   }
                 }) as any;
               };
