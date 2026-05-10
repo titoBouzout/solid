@@ -6280,3 +6280,76 @@ Work that V8 was attributing to the inner arrow (`(anon)` frame) folds into `pul
 
 Kept for: smaller hot-path call graph, slightly less GC pressure (closure escape isn't always reliable across IC tier transitions), and clearer intent. Tests: all `408` `solid-js` tests pass.
 
+### Investigation 17: Grouped dynamic-attribute closures (2026-05-09)
+
+Followed up on the post-Inv-15 `search-results` profile (`~38%` combined `_v$N` self-time). The compiler emits one `() => …` closure per dynamic attribute / textContent expression and passes it as a hole to `ssr()`. Each closure is a fresh allocation per render and a fresh callsite for `tryResolveString`'s `typeof === "function"` dispatch. For an `<Item>` with 6 dynamic exprs that's 6 allocations + 6 closure invocations + 6 trips through `tryResolveString` per row, every row.
+
+**Idea.** Coalesce contiguous attribute/textContent closures into a single grouped function that returns an array of values. The runtime calls the group once and dequeues across the N hole positions. Inserts/children stay separate — only attribute-class expressions are grouped. Cross-element grouping is allowed (no benefit in restricting to per-element only); a child insert at any hole position breaks the run, so isolation is preserved.
+
+**Compiler emission** (search-results `Item`):
+
+```js
+var _g$ = _$ssrGroup(
+  () => [
+    _$ssrStyleProperty("background-color:", purchased() ? "#f1c40f" : ""),
+    _$escape(item().title),
+    _$ssrAttribute("href", "/buy/" + _$escape(item().id, true)),
+    _$ssrAttribute("src", _$escape(item().image, true)),
+    _$ssrAttribute("alt", _$escape(item().title, true)),
+    _$escape(item().price)
+  ],
+  6
+);
+return _$ssr(_tmpl$, _g$, _g$, _g$, _g$, _g$, _g$, _v$7);
+```
+
+`_$ssrGroup(fn, n)` tags `fn.$g = n` and returns it. The same identifier is repeated `n` times in the `ssr()` call so positional structure is preserved.
+
+**Runtime fast-path** in `ssr()` (placed at the *end* of the typeof chain — after `string`/`number`/`null`/`boolean` — so non-function holes never pay for the function check):
+
+```js
+} else if (ht === "function" && hole.$g) {
+  if (lastGroup === hole) {
+    // Continuation: dequeue from cache.
+    value = lastGroupArr[lastGroupIdx++];
+  } else {
+    // First hit: call helper that wraps try/catch.
+    const r = ssrFirstGroupHit(hole);
+    // ...
+  }
+}
+```
+
+The `try/catch` lives in `ssrFirstGroupHit` (out of the hot loop) so the loop body is keyword-free. On `NotReadyError`, the helper returns an escalation tuple; the runtime emits N retry slots that all reference the same group identity, so a single retry pass produces all values.
+
+**Preflight (hand-edited bundles, 2 rounds, `solid-next/inferno` ratio):**
+
+| variant | search-results | color-picker |
+|---|---|---|
+| Sync-only proto, branch first | +12.9% | −1.9% (noise) |
+| NotReady-aware, branch first | gains held | **−3% regression** |
+| NotReady-aware, branch end-of-typeof | +13.6% | flat (+0.6%) |
+| Helper-pattern, branch end-of-typeof | +13.7% | flat (+0.3%) |
+
+The branch placement matters more than the keyword-vs-helper split: putting the function check first forces every non-function hole through one extra `typeof === "function"` evaluation, which `color-picker` (no groupings) measurably regresses on. End-of-typeof keeps the original cheap holes on their original path.
+
+**Real compiler results (after rebuilding bundles, 2 rounds):**
+
+| bench | round 1 ratio | round 2 ratio | avg | vs pre-Inv-17 baseline |
+|-------|-------------:|--------------:|----:|----------------------:|
+| `search-results` | 2.699 | 2.610 | **2.654** | `+15.4%` |
+| `color-picker`   | 1.046 | 1.041 | **1.044** | `+4.4%` (within noise) |
+
+`color-picker` stays flat — its bundle has no `ssrGroup` calls (no element has ≥2 contiguous dynamic attrs), and the new branch is gated by `hole.$g` so unrelated bundles only pay one extra typeof+property check on the cold path.
+
+**Files changed:**
+
+- `dom-expressions/src/server.js`: added `ssrGroup`, `ssrFirstGroupHit`, group fast-path in `ssr()`.
+- `babel-plugin-jsx-dom-expressions/src/ssr/element.js`: tracks `groupable` set in `results`, marks textContent attribute closures, emits `_$ssrGroup(() => […], N)` for runs ≥2 with N copies of the identifier in the ssr() call. textContent stays a "child" in the AST (so insertion semantics are unchanged) but is flagged so `transformChildren` passes `{ group: true }` to `hoistExpression`.
+
+**Hydration-id safety.** Inserts/children stay outside groups by construction. Attribute/textContent expressions never allocate hydration ids (they read settled signal/memo/resource values and format them — no `getNextContextId`/owner creation). Hydration only matches the final settled HTML, so even retry-driven re-evaluation of a group fn doesn't affect ids.
+
+**Retry cost (addressed).** First sketch had each retry slot call `escFn()[idx]` independently — `N²` attribute evaluations on a successful retry pass for an `N`-slot group, and another `N²` on every failure pass. Replaced with a module-scoped `(_lastGroupFn, _lastGroupArr, _lastGroupErr)` cache consulted by every grouped slot. Slots fire contiguously in queue order, so within a pass slot 0 evaluates `state.fn()` once and caches the array (success) or error (failure) on the module slots; slots `1..N-1` short-circuit on `_lastGroupFn === state.fn`. Cache invalidates two ways: a different `state.fn` (next group's slot 0), or the same `state.fn` re-firing at `idx === 0` (next retry pass for the same group, including the solo-group case where no other fn fires between passes). Net cost: 1 evaluation per group per pass — `N²` → `N` on success, `N²` → `1` on failure — with no per-state bookkeeping.
+
+**Tests.** All `118` `babel-plugin-jsx-dom-expressions` fixtures pass (6 SSR fixtures regenerated for the new emission). All `176` `dom-expressions` SSR runtime tests, `81` `solid-web` server tests, `13` `solid-web` hydration tests, and `405` `solid-js` tests pass.
+
