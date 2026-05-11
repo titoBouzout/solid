@@ -1,5 +1,56 @@
 # solid-js
 
+## 2.0.0-beta.11
+
+### Patch Changes
+
+- 95ca987: Bump dom-expressions, babel-plugin-jsx-dom-expressions, hyper-dom-expressions, and sld-dom-expressions to 0.50.0-next.8.
+  - **SSR attribute/textContent grouping** (next.7): the compiler now coalesces contiguous runs of dynamic attribute and `textContent` closures into a single `_$ssrGroup(() => […], N)` per element, and the runtime resolves all `N` hole positions through one closure invocation instead of `N`. Inserts/children stay separate so child isolation and hydration ids are unaffected. Bench: ~+15% on `search-results` (heavy attribute usage), neutral on `color-picker` (no qualifying groups).
+  - **SSR bail-path single-invocation fix** (next.8): `ssr()` was invoking certain function holes twice when their return value walked into the bail branch (e.g., an array containing a NotReady-throwing item). For closures that read stateful getters such as JSX `props.children` — which rebuilds an owner subtree on each access — the duplicate invocation produced a divergent hydration-key prefix that the client could not claim, surfacing as "Hydration completed with N unclaimed server-rendered node(s)" warnings. The bail path now consumes the already-evaluated value instead of re-invoking the original closure.
+
+- cb04b8e: Export public primitive option types from the root `solid-js` entrypoint and align projection options with hydration fields.
+- b0db6c9: Ensure manual writes to writable derived signals and derived stores win over queued same-tick recomputes.
+- 47c0e6f: Fix memory leak where individually-disposed owners (e.g. `<For>` rows whose
+  keyed-by-identity entries are replaced) stayed wired into their parent's
+  `_firstChild → _nextSibling` chain forever, causing zombie Owner shells to
+  accumulate per click. The previous fix (`ac50d5cf`) had stopped nulling
+  `_nextSibling` to keep the chain intact during cascading `unobserved()` walks,
+  but that left no path to detach an individually-disposed node from its parent.
+
+  Owners now form a doubly-linked sibling list (`_prevSibling` added to the
+  `Owner` shape, mirroring how subscriptions already use `_prevSub`/`_nextSub`).
+  On individual disposal we splice the node out of its parent's chain in O(1).
+  The splice is skipped when the parent is itself being torn down (batch
+  dispose path is unchanged) or when the node was already a zombie sitting on
+  `_pendingFirstChild`. The disposed node's own `_nextSibling` is deliberately
+  left intact so an in-flight outer dispose walk that already advanced past
+  this node still reaches later siblings — preserving the cascade-safety from
+  the original fix.
+
+- 263be3f: fix(signals): `refresh()` no longer cascades into upstream memos. Only the memos read at the top level of the refresh callback (or the explicit `refresh(memo)` target) recompute; their dependencies are left untouched. `isRefreshing()` still reports `true` for the entire refresh call so consumers can opt into deeper refresh manually.
+- 59d84ba: Fix the Tier-1 SSR `search-results` / `color-picker` benches under `packages/solid-web/test/server/`. Both files now carry a `@jsxImportSource @solidjs/web` pragma so `tsc --project tsconfig.test.json` can resolve `JSX.IntrinsicElements`. The `search-results` bench had a latent typing bug — it passed the row accessor through `<For>` while typing the row component's prop as the resolved `SearchItem`, so every `props.item.title` read returned `undefined` and the bench was silently emitting empty `textContent` for every dynamic field. The bench now mirrors the realistic Solid 2.0 keyed shape under performance optimized situations: dereference the row accessor at the `<For>` boundary, destructure `props.item` once at function entry, then read plain locals in the JSX. This means a single props-proxy trap per row instead of one per field access, and the bench now actually measures rendering of real data.
+- 80b4e8d: Replace the upstream `@solidjs/signals` owner runtime with a lean SSR-specific implementation. The server is single-pass and pull-based, so the scheduler / heap / zombie graph / observer linked list that the upstream owner carries serve no purpose during SSR. The new `SSROwner` shape is a forward-only linked list with cleanup hooks and an id (~9 fields vs. ~14 upstream), plus a freelist that recycles owners across the disposal at end-of-render — repeat renders of the same shape pay ~0 steady-state owner allocation.
+
+  Layered on top:
+  - `mapArray` and `repeat` rows reuse the parent memo owner instead of allocating a new owner per iteration. Per-row id parity with the client is preserved by mutating the memo owner's `id` and resetting `_childCount` for each iteration; nested compiler-emitted memos / providers / boundaries see the correct synthetic row id as their parent prefix. Safe because `mapFn` runs once per render (sync `NotReadyError` propagates up through the `sync: true` outer memo and the engine reruns the whole `mapArray`) and async retries always live in their own nested owners with snapshotted ids.
+  - `createSyncMemo` is a separate lean memo for computes statically guaranteed to return synchronously (compiler-emitted `_$memo` / `_$effect` wrappers, internal control-flow primitives). It skips the full `ServerComputation` / `processResult` / `$REFRESH` / `runWithObserver` / `onCleanup` scaffolding that async memos need, while still letting `NotReadyError` propagate to the nearest boundary.
+  - The Loading boundary now uses `disposeOwner(o, false)` directly (instead of `o.dispose(false)`) to wipe the boundary's children on retry while keeping the boundary owner itself alive for the re-run. `SSRTemplateObject` is widened to a union covering both the heavy `{ t: string[]; h: Function[]; p: Promise[] }` shape and the leaf `{ t: string }` shape; the boundary's pending-loop narrows to the heavy variant before threading values back through `ctx.ssr`.
+
+- d2529e3: Redesign refresh to invalidate a single explicit target without reading accessor values.
+- 80b4e8d: Remove `ssrRunInScope` from the public surface. The function had been a true pass-through identity (`fn => fn`) on the server runtime since owner-capture moved into `tryResolveString`'s `NotReadyError` handler, and the compiler no longer emits it. With no internal callers and no behavior to provide, the export was dead surface area and is now removed from `solid-js` (server export, server core impl, client stub) and from `@solidjs/web`'s `rxcore` re-export. User code that called it can drop the wrap (it was a no-op) or replicate the original deferred-callback owner-capture intent in two lines with `getOwner()` + `runWithOwner()`.
+- 80b4e8d: Mark internal control-flow memos as `sync: true` on both client and server runtimes (`Show`, `Switch`, `mapArray`'s outer body, `repeat`'s outer body, `children`'s outer flatten memo, `lazy`'s outer render memo, plus `Show` / `Switch` non-keyed condition wrappers). The user-input-facing memos (`when={…}`, `each={…}`, `props.children` getter, `lazy()`'s pending promise) stay async-shape aware. This skips the per-recompute Promise/AsyncIterable probe in `recompute` (client) and the corresponding `ServerComputation` / `processResult` / `$REFRESH` scaffolding (server) for memos statically guaranteed to return synchronously, reducing per-render overhead in SSR and client renders without affecting async behavior.
+- Updated dependencies [cf62254]
+- Updated dependencies [e41186c]
+- Updated dependencies [02ec407]
+- Updated dependencies [e16371f]
+- Updated dependencies [7d4d0c3]
+- Updated dependencies [005c9fb]
+- Updated dependencies [d2529e3]
+- Updated dependencies [7d4d0c3]
+- Updated dependencies [d42f112]
+- Updated dependencies [e16371f]
+  - @solidjs/signals@2.0.0-beta.11
+
 ## 2.0.0-beta.10
 
 ### Major Changes

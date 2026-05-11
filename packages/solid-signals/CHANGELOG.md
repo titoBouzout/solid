@@ -1,5 +1,36 @@
 # @solidjs/signals
 
+## 2.0.0-beta.11
+
+### Patch Changes
+
+- cf62254: Throw a dev-mode error when refresh is called with an unbranded target.
+- e41186c: Drop stale dependencies from async memos after their pending result settles.
+- 02ec407: Prevent pending async reads from escaping when refreshing an optimistic accessor with an active override.
+- e16371f: Reduce effect creation overhead by sharing status notification logic, registering effect cleanups lazily, and avoiding generic store proxy work for tracked reads of absent plain-object properties.
+- 7d4d0c3: Optimize pending node commits for the common single-source update path.
+- 005c9fb: Improve merge and omit performance for store utility hot paths.
+- d2529e3: Redesign refresh to invalidate a single explicit target without reading accessor values.
+- 7d4d0c3: Add scoped synchronous flushing and skip no-op status work.
+- d42f112: perf(store): split `applyState` into fast/slow paths and tighten store hot-path
+
+  `applyState` now dispatches at every (recursive) call between a `applyStateFast`
+  body for plain stores and an `applyStateSlow` body for stores with override or
+  optimistic-override slots set. The fast body never calls `getOverrideValue` and
+  never branches on a `fastPath` flag, so V8 sees a tighter, more inlinable shape
+  in the overwhelmingly common case. Validated end-to-end with UIBench: ~18–21%
+  total render time improvement, with no regression in `js-framework-benchmark`.
+
+  Also:
+  - `isWrappable` restructured for an early-return hot path on the common
+    `null` / non-object cases.
+  - `createStoreProxy` now only stamps `STORE_CUSTOM_PROTO` when the prototype
+    is non-trivial, avoiding the extra slot on the default object/array path.
+
+- e16371f: Performance: add `CONFIG_SYNC` opt-in for sync-only computeds/effects. New `sync?: boolean` option on `MemoOptions`/`EffectOptions` skips the async-shape probe in `recompute` for nodes that provably never return Promise/AsyncIterable. Compiler-emitted `_$effect` and `_$memo` (via `@solidjs/web`'s `effect`/`memo` wrappers) opt in by default — `01_run1k` mean −0.62 ms and `08_create1k-after1k_x2` mean −0.80 ms in `js-framework-benchmark`. User-authored `createMemo`/`createEffect`/`createRenderEffect` keep full async-aware behavior unless they explicitly pass `sync: true`. Returning a Promise from a `sync: true` node throws `SYNC_NODE_RECEIVED_ASYNC` in dev (production silently stores the unawaited value, by contract).
+
+  Correctness: `flush(fn)` now drains at every nesting level instead of only the outermost. Nested `flush(fn)` calls each honor their own contract — writes inside an inner `flush(fn)` propagate before it returns, rather than being held until the outer `flush(fn)` exits. Microtask scheduling and arg-less `flush()` are unchanged. Code that depended on the old hold-until-outermost behavior should switch to a harness-layer depth counter (see `js-reactivity-benchmark`'s `r3` / `r3-solid-target` adapters for the pattern).
+
 ## 2.0.0-beta.10
 
 ### Patch Changes
