@@ -7,6 +7,11 @@ import { resolve } from "path";
 
 const rootDir = resolve(__dirname);
 
+// Bench mode under CodSpeed's Valgrind instrumentation runs each iteration
+// 10-100× slower than normal, which can stall the threads-pool RPC heartbeat
+// past its timeout. Use forks+singleFork for benches; threads stays for tests.
+const isBench = process.argv.includes("bench");
+
 export default defineConfig({
   plugins: [solidPlugin(), codspeedPlugin()],
   server: {
@@ -20,7 +25,11 @@ export default defineConfig({
       exclude: ["**/*.d.ts", "src/server/*.ts"]
     },
     environment: "jsdom",
-    pool: "threads",
+    pool: isBench ? "forks" : "threads",
+    poolOptions: isBench ? { forks: { singleFork: true } } : undefined,
+    testTimeout: isBench ? 120_000 : 5_000,
+    hookTimeout: isBench ? 120_000 : 10_000,
+    teardownTimeout: isBench ? 120_000 : 10_000,
     globals: true,
     exclude: ["**/node_modules/**", "wip_tests/**", "test/server/**", "test/hydration/**"],
     // Bench mode reads `benchmark.exclude` separately from `test.exclude`.

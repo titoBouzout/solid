@@ -20,7 +20,13 @@ export default defineConfig({
     environment: "node",
     include: ["test/server/**/*.bench.tsx"],
     globals: true,
-    pool: "threads",
+    // Bench-only config: forks+singleFork avoids threads-pool RPC heartbeat
+    // timeouts under CodSpeed's Valgrind instrumentation.
+    pool: "forks",
+    poolOptions: { forks: { singleFork: true } },
+    testTimeout: 120_000,
+    hookTimeout: 120_000,
+    teardownTimeout: 120_000,
     benchmark: {
       include: ["test/server/**/*.bench.tsx"],
       exclude: ["**/node_modules/**", "test/*.bench.tsx"]
