@@ -11,8 +11,8 @@
     // This can be removed if the following issue gets fixed:
     // https://github.com/alexeyraspopov/picocolors/issues/50
     "allowSyntheticDefaultImports": true,
-    // Allows TS to see the Vitest globals
-    "types": ["vitest/globals"],
+    // Allows TS to see the Vitest globals and Node globals (e.g. `process`)
+    "types": ["vitest/globals", "node"],
     "skipLibCheck": true,
     "ignoreDeprecations": "6.0"
   },
