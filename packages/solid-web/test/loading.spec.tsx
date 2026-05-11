@@ -4,11 +4,19 @@
  */
 
 import { describe, expect, test, beforeEach, afterEach, vi } from "vitest";
-import "./MessageChannel.js";
-import { lazy, createSignal, createMemo, Loading, createStore, Show, flush } from "solid-js";
+import {
+  lazy,
+  type Component,
+  createSignal,
+  createMemo,
+  Loading,
+  Show,
+  Switch,
+  Match,
+  isPending,
+  flush
+} from "solid-js";
 import { render } from "../src/index.js";
-
-// enableScheduling();
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -262,360 +270,173 @@ describe("Testing Loading", () => {
     localDispose();
   });
 
-  // test("Toggle with refresh transition", async () => {
-  //   const [pending, start] = useTransition();
-  //   let finished = false;
+  test("implicit route transition stays held after lazy component is cached", async () => {
+    let setRoute!: (value: "home" | "profile") => void;
+    const localDiv = document.createElement("div");
+    const resolvers: Array<(value: string) => void> = [];
+    type ProfileProps = { user: string; info: string };
+    let resolveLazy!: (mod: { default: Component<ProfileProps> }) => void;
 
-  //   start(() => trigger("Jo")).then(() => (finished = true));
-  //   expect(div.innerHTML).toBe("Hi, .Hello ");
-  //   expect(finished).toBe(false);
-  //   // wait trigger resource refetch
-  //   await Promise.resolve();
+    const nextData = () =>
+      new Promise<string>(resolve => {
+        resolvers.push(resolve);
+      });
+    const Profile: Component<ProfileProps> = props => {
+      return (
+        <>
+          <h1>{props.user}'s Profile</h1>
+          <p>{props.info}</p>
+        </>
+      );
+    };
+    const LazyProfile = lazy<Component<ProfileProps>>(
+      () => new Promise(resolve => (resolveLazy = resolve))
+    );
+    const ProfileRoute = () => {
+      const user = createMemo(() => nextData());
+      const info = createMemo(() => {
+        user();
+        return nextData();
+      });
+      return <LazyProfile user={user()} info={info()} />;
+    };
 
-  //   expect(div.innerHTML).toBe("Hi, .Hello ");
-  //   expect(pending()).toBe(true);
-  //   expect(finished).toBe(false);
+    const localDispose = render(() => {
+      const [route, _setRoute] = createSignal<"home" | "profile">("home");
+      setRoute = _setRoute;
 
-  //   // Exhausts create-resource setTimeout
-  //   vi.runAllTimers();
-  //   // wait update suspense state
-  //   await Promise.resolve();
-  //   // wait update computation
-  //   vi.runAllTimers();
-  //   // wait write signal suc
-  //   await Promise.resolve();
+      const matches = (value: "home" | "profile") => route() === value;
 
-  //   vi.runAllTimers();
-  //   await Promise.resolve();
+      return (
+        <div class={{ pending: isPending(route) }}>
+          <Switch>
+            <Match when={matches("home")}>
+              <h1>Home</h1>
+            </Match>
+            <Match when={matches("profile")}>
+              <ProfileRoute />
+            </Match>
+          </Switch>
+        </div>
+      );
+    }, localDiv);
 
-  //   expect(div.innerHTML).toBe("Hi, Jo.Hello Jo");
-  //   expect(pending()).toBe(false);
-  //   expect(finished).toBe(true);
-  // });
+    expect(localDiv.innerHTML).toBe("<div><h1>Home</h1></div>");
 
-  // test("Toggle with store and refresh transition", async () => {
-  //   const [store, setStore] = createStore({ count: 0 });
-  //   const [pending, start] = useTransition();
-  //   let finished = false;
+    setRoute("profile");
+    flush();
+    expect(localDiv.innerHTML).toBe('<div class="pending"><h1>Home</h1></div>');
 
-  //   start(() => {
-  //     setStore({ count: 1 });
-  //     trigger("Jack");
-  //   }).then(() => (finished = true));
+    resolveLazy({ default: Profile });
+    await Promise.resolve();
+    await Promise.resolve();
+    flush();
+    expect(localDiv.innerHTML).toBe('<div class="pending"><h1>Home</h1></div>');
 
-  //   expect(store.count).toBe(0);
-  //   expect(finished).toBe(false);
-  //   // wait trigger resource refetch
-  //   await Promise.resolve();
+    resolvers.shift()!("Jon");
+    await Promise.resolve();
+    flush();
+    expect(localDiv.innerHTML).toBe('<div class="pending"><h1>Home</h1></div>');
 
-  //   expect(store.count).toBe(0);
-  //   expect(pending()).toBe(true);
-  //   expect(finished).toBe(false);
+    resolvers.shift()!("Knows nothing");
+    await Promise.resolve();
+    flush();
+    expect(localDiv.innerHTML).toBe(
+      '<div class=""><h1>Jon\'s Profile</h1><p>Knows nothing</p></div>'
+    );
 
-  //   // Exhausts create-resource setTimeout
-  //   vi.runAllTimers();
-  //   // wait update suspense state
-  //   await Promise.resolve();
-  //   // wait update computation
-  //   vi.runAllTimers();
+    setRoute("home");
+    flush();
+    expect(localDiv.innerHTML).toBe('<div class=""><h1>Home</h1></div>');
 
-  //   // Await the rest of the things, TODO: figure out what these are
-  //   await Promise.resolve();
-  //   vi.runAllTimers();
-  //   await Promise.resolve();
+    setRoute("profile");
+    flush();
+    expect(localDiv.innerHTML).toBe('<div class="pending"><h1>Home</h1></div>');
 
-  //   expect(pending()).toBe(false);
-  //   expect(finished).toBe(true);
-  //   expect(store.count).toBe(1);
-  // });
+    resolvers.shift()!("Arya");
+    await Promise.resolve();
+    flush();
+    expect(localDiv.innerHTML).toBe('<div class="pending"><h1>Home</h1></div>');
+
+    resolvers.shift()!("No one");
+    await Promise.resolve();
+    flush();
+    expect(localDiv.innerHTML).toBe('<div class=""><h1>Arya\'s Profile</h1><p>No one</p></div>');
+
+    localDispose();
+  });
+
+  test("implicit route transition stays held through wrapped memo component output", async () => {
+    let setRoute!: (value: "home" | "profile") => void;
+    const localDiv = document.createElement("div");
+    const resolvers: Array<(value: string) => void> = [];
+    type ProfileProps = { user: string; info: string };
+
+    const nextData = () =>
+      new Promise<string>(resolve => {
+        resolvers.push(resolve);
+      });
+    const Profile: Component<ProfileProps> = props => {
+      return (
+        <>
+          <h1>{props.user}'s Profile</h1>
+          <p>{props.info}</p>
+        </>
+      );
+    };
+    const WrappedProfile: Component<ProfileProps> = props =>
+      createMemo(() => <Profile user={props.user} info={props.info} />, { sync: true }) as any;
+    const ProfileRoute = () => {
+      const user = createMemo(() => nextData());
+      const info = createMemo(() => {
+        user();
+        return nextData();
+      });
+      return <WrappedProfile user={user()} info={info()} />;
+    };
+
+    const localDispose = render(() => {
+      const [route, _setRoute] = createSignal<"home" | "profile">("home");
+      setRoute = _setRoute;
+      const matches = (value: "home" | "profile") => route() === value;
+
+      return (
+        <div class={{ pending: isPending(route) }}>
+          <Switch>
+            <Match when={matches("home")}>
+              <h1>Home</h1>
+            </Match>
+            <Match when={matches("profile")}>
+              <ProfileRoute />
+            </Match>
+          </Switch>
+        </div>
+      );
+    }, localDiv);
+
+    expect(localDiv.innerHTML).toBe("<div><h1>Home</h1></div>");
+
+    setRoute("profile");
+    flush();
+    expect(localDiv.innerHTML).toBe('<div class="pending"><h1>Home</h1></div>');
+
+    resolvers.shift()!("Jon");
+    await Promise.resolve();
+    flush();
+    expect(localDiv.innerHTML).toBe('<div class="pending"><h1>Home</h1></div>');
+
+    resolvers.shift()!("Knows nothing");
+    await Promise.resolve();
+    flush();
+    expect(localDiv.innerHTML).toBe(
+      '<div class=""><h1>Jon\'s Profile</h1><p>Knows nothing</p></div>'
+    );
+
+    localDispose();
+  });
 
   test("dispose", () => {
     div.innerHTML = "";
     disposer();
   });
 });
-
-// describe("SuspenseList", () => {
-//   const promiseFactory = (time: number) => {
-//       return (v: string) =>
-//         new Promise<string>(r => {
-//           setTimeout(() => {
-//             r(v);
-//           }, time);
-//         });
-//     },
-//     A = () => {
-//       const [value] = createResource("A", promiseFactory(200));
-//       return <div>{value()}</div>;
-//     },
-//     B = () => {
-//       const [value] = createResource("B", promiseFactory(100));
-//       return <div>{value()}</div>;
-//     },
-//     C = () => {
-//       const [value] = createResource("C", promiseFactory(300));
-//       return <div>{value()}</div>;
-//     };
-
-//   test("revealOrder together", async () => {
-//     const div = document.createElement("div"),
-//       Comp = () => (
-//         <SuspenseList revealOrder="together">
-//           <Suspense fallback={<div>Loading 1</div>}>
-//             <A />
-//           </Suspense>
-//           <Suspense fallback={<div>Loading 2</div>}>
-//             <B />
-//           </Suspense>
-//           <Suspense fallback={<div>Loading 3</div>}>
-//             <C />
-//           </Suspense>
-//         </SuspenseList>
-//       );
-//     const dispose = render(Comp, div);
-//     expect(div.innerHTML).toBe("<div>Loading 1</div><div>Loading 2</div><div>Loading 3</div>");
-//     vi.advanceTimersByTime(110);
-//     await Promise.resolve();
-//     expect(div.innerHTML).toBe("<div>Loading 1</div><div>Loading 2</div><div>Loading 3</div>");
-//     vi.advanceTimersByTime(100);
-//     await Promise.resolve();
-//     expect(div.innerHTML).toBe("<div>Loading 1</div><div>Loading 2</div><div>Loading 3</div>");
-//     vi.advanceTimersByTime(100);
-//     // wait effect update
-//     await Promise.resolve();
-//     expect(div.innerHTML).toBe("<div>A</div><div>B</div><div>C</div>");
-//     dispose();
-//   });
-
-//   test("revealOrder forwards", async () => {
-//     const div = document.createElement("div"),
-//       Comp = () => (
-//         <SuspenseList revealOrder="forwards">
-//           <Suspense fallback={<div>Loading 1</div>}>
-//             <A />
-//           </Suspense>
-//           <Suspense fallback={<div>Loading 2</div>}>
-//             <B />
-//           </Suspense>
-//           <Suspense fallback={<div>Loading 3</div>}>
-//             <C />
-//           </Suspense>
-//         </SuspenseList>
-//       );
-//     const dispose = render(Comp, div);
-//     expect(div.innerHTML).toBe("<div>Loading 1</div><div>Loading 2</div><div>Loading 3</div>");
-
-//     vi.advanceTimersByTime(110);
-//     await Promise.resolve();
-//     expect(div.innerHTML).toBe("<div>Loading 1</div><div>Loading 2</div><div>Loading 3</div>");
-
-//     vi.advanceTimersByTime(100);
-//     await Promise.resolve();
-//     expect(div.innerHTML).toBe("<div>A</div><div>B</div><div>Loading 3</div>");
-
-//     vi.advanceTimersByTime(100);
-//     await Promise.resolve();
-//     expect(div.innerHTML).toBe("<div>A</div><div>B</div><div>C</div>");
-//     dispose();
-//   });
-
-//   test("revealOrder forwards hidden", async () => {
-//     const div = document.createElement("div"),
-//       Comp = () => (
-//         <SuspenseList revealOrder="forwards" tail="hidden">
-//           <Suspense fallback={<div>Loading 1</div>}>
-//             <A />
-//           </Suspense>
-//           <Suspense fallback={<div>Loading 2</div>}>
-//             <B />
-//           </Suspense>
-//           <Suspense fallback={<div>Loading 3</div>}>
-//             <C />
-//           </Suspense>
-//         </SuspenseList>
-//       );
-//     const dispose = render(Comp, div);
-//     expect(div.innerHTML).toBe("");
-
-//     vi.advanceTimersByTime(110);
-//     await Promise.resolve();
-//     expect(div.innerHTML).toBe("");
-
-//     vi.advanceTimersByTime(100);
-//     await Promise.resolve();
-//     expect(div.innerHTML).toBe("<div>A</div><div>B</div>");
-
-//     vi.advanceTimersByTime(100);
-//     await Promise.resolve();
-//     expect(div.innerHTML).toBe("<div>A</div><div>B</div><div>C</div>");
-//     dispose();
-//   });
-
-//   test("revealOrder forwards", async () => {
-//     const div = document.createElement("div"),
-//       Comp = () => (
-//         <SuspenseList revealOrder="forwards">
-//           <Suspense fallback={<div>Loading 1</div>}>
-//             <A />
-//           </Suspense>
-//           <Suspense fallback={<div>Loading 2</div>}>
-//             <B />
-//           </Suspense>
-//           <Suspense fallback={<div>Loading 3</div>}>
-//             <C />
-//           </Suspense>
-//         </SuspenseList>
-//       );
-//     const dispose = render(Comp, div);
-//     expect(div.innerHTML).toBe("<div>Loading 1</div><div>Loading 2</div><div>Loading 3</div>");
-
-//     vi.advanceTimersByTime(110);
-//     await Promise.resolve();
-//     expect(div.innerHTML).toBe("<div>Loading 1</div><div>Loading 2</div><div>Loading 3</div>");
-
-//     vi.advanceTimersByTime(100);
-//     await Promise.resolve();
-//     expect(div.innerHTML).toBe("<div>A</div><div>B</div><div>Loading 3</div>");
-
-//     vi.advanceTimersByTime(100);
-//     await Promise.resolve();
-//     expect(div.innerHTML).toBe("<div>A</div><div>B</div><div>C</div>");
-//     dispose();
-//   });
-
-//   test("revealOrder forwards collapse", async () => {
-//     const div = document.createElement("div"),
-//       Comp = () => (
-//         <SuspenseList revealOrder="forwards" tail="collapsed">
-//           <Suspense fallback={<div>Loading 1</div>}>
-//             <A />
-//           </Suspense>
-//           <Suspense fallback={<div>Loading 2</div>}>
-//             <B />
-//           </Suspense>
-//           <Suspense fallback={<div>Loading 3</div>}>
-//             <C />
-//           </Suspense>
-//         </SuspenseList>
-//       );
-//     const dispose = render(Comp, div);
-//     expect(div.innerHTML).toBe("<div>Loading 1</div>");
-
-//     vi.advanceTimersByTime(110);
-//     await Promise.resolve();
-//     expect(div.innerHTML).toBe("<div>Loading 1</div>");
-
-//     vi.advanceTimersByTime(100);
-//     await Promise.resolve();
-//     expect(div.innerHTML).toBe("<div>A</div><div>B</div><div>Loading 3</div>");
-
-//     vi.advanceTimersByTime(100);
-//     await Promise.resolve();
-//     expect(div.innerHTML).toBe("<div>A</div><div>B</div><div>C</div>");
-//     dispose();
-//   });
-
-//   test("revealOrder backwards collapse", async () => {
-//     const div = document.createElement("div"),
-//       Comp = () => (
-//         <SuspenseList revealOrder="backwards" tail="collapsed">
-//           <Suspense fallback={<div>Loading 1</div>}>
-//             <A />
-//           </Suspense>
-//           <Suspense fallback={<div>Loading 2</div>}>
-//             <B />
-//           </Suspense>
-//           <Suspense fallback={<div>Loading 3</div>}>
-//             <C />
-//           </Suspense>
-//         </SuspenseList>
-//       );
-//     const dispose = render(Comp, div);
-//     expect(div.innerHTML).toBe("<div>Loading 3</div>");
-
-//     vi.advanceTimersByTime(110);
-//     await Promise.resolve();
-//     expect(div.innerHTML).toBe("<div>Loading 3</div>");
-
-//     vi.advanceTimersByTime(100);
-//     await Promise.resolve();
-//     expect(div.innerHTML).toBe("<div>Loading 3</div>");
-
-//     vi.advanceTimersByTime(100);
-//     await Promise.resolve();
-//     expect(div.innerHTML).toBe("<div>A</div><div>B</div><div>C</div>");
-//     dispose();
-//   });
-
-//   test("nested SuspenseList together", async () => {
-//     const div = document.createElement("div"),
-//       Comp = () => (
-//         <SuspenseList revealOrder="together">
-//           <SuspenseList revealOrder="together">
-//             <Suspense fallback={<div>Loading 1</div>}>
-//               <A />
-//             </Suspense>
-//           </SuspenseList>
-//           <SuspenseList revealOrder="together">
-//             <Suspense fallback={<div>Loading 2</div>}>
-//               <B />
-//             </Suspense>
-//             <Suspense fallback={<div>Loading 3</div>}>
-//               <C />
-//             </Suspense>
-//           </SuspenseList>
-//         </SuspenseList>
-//       );
-//     const dispose = render(Comp, div);
-//     expect(div.innerHTML).toBe("<div>Loading 1</div><div>Loading 2</div><div>Loading 3</div>");
-
-//     vi.advanceTimersByTime(110);
-//     await Promise.resolve();
-//     expect(div.innerHTML).toBe("<div>Loading 1</div><div>Loading 2</div><div>Loading 3</div>");
-
-//     vi.advanceTimersByTime(100);
-//     await Promise.resolve();
-//     expect(div.innerHTML).toBe("<div>Loading 1</div><div>Loading 2</div><div>Loading 3</div>");
-
-//     vi.advanceTimersByTime(100);
-//     await Promise.resolve();
-//     expect(div.innerHTML).toBe("<div>A</div><div>B</div><div>C</div>");
-//     dispose();
-//   });
-
-//   test("nested SuspenseList forwards", async () => {
-//     const div = document.createElement("div"),
-//       Comp = () => (
-//         <SuspenseList revealOrder="forwards">
-//           <SuspenseList revealOrder="forwards">
-//             <Suspense fallback={<div>Loading 1</div>}>
-//               <A />
-//             </Suspense>
-//           </SuspenseList>
-//           <SuspenseList revealOrder="forwards">
-//             <Suspense fallback={<div>Loading 2</div>}>
-//               <B />
-//             </Suspense>
-//             <Suspense fallback={<div>Loading 3</div>}>
-//               <C />
-//             </Suspense>
-//           </SuspenseList>
-//         </SuspenseList>
-//       );
-//     const dispose = render(Comp, div);
-//     expect(div.innerHTML).toBe("<div>Loading 1</div><div>Loading 2</div><div>Loading 3</div>");
-
-//     vi.advanceTimersByTime(110);
-//     await Promise.resolve();
-//     expect(div.innerHTML).toBe("<div>Loading 1</div><div>Loading 2</div><div>Loading 3</div>");
-
-//     vi.advanceTimersByTime(100);
-//     await Promise.resolve();
-//     expect(div.innerHTML).toBe("<div>A</div><div>B</div><div>Loading 3</div>");
-
-//     vi.advanceTimersByTime(100);
-//     await Promise.resolve();
-//     expect(div.innerHTML).toBe("<div>A</div><div>B</div><div>C</div>");
-//     dispose();
-//   });
-// });
