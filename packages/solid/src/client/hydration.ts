@@ -71,12 +71,12 @@ declare module "@solidjs/signals" {
   interface MemoOptions<T> extends HydrationSsrFields {}
   interface SignalOptions<T> extends HydrationSsrFields {}
   interface EffectOptions extends HydrationSsrFields {}
+  interface ProjectionOptions extends HydrationSsrFields {}
 }
 
 /**
  * Options for `createProjection`, `createStore(fn, ...)`, and
- * `createOptimisticStore(fn, ...)` — `ProjectionOptions` plus a
- * hydration-aware `ssrSource` field.
+ * `createOptimisticStore(fn, ...)`.
  *
  * `ssrSource` controls what initial value the client uses and whether
  * the projection's compute re-runs:
@@ -90,10 +90,6 @@ declare module "@solidjs/signals" {
  *
  * See {@link HydrationSsrFields} for the fuller explanation.
  */
-export type HydrationProjectionOptions = ProjectionOptions & {
-  ssrSource?: "server" | "hybrid" | "client";
-};
-
 type HydrationClientMemoOptions<T> = Omit<MemoOptions<T>, "ssrSource"> & { ssrSource: "client" };
 type HydrationMemoOptions<T> = Omit<MemoOptions<T>, "ssrSource"> & {
   ssrSource?: "server" | "hybrid";
@@ -1012,14 +1008,14 @@ export const createOptimistic: {
  * );
  * ```
  *
- * **Hydration:** {@link HydrationProjectionOptions} adds `ssrSource`
+ * **Hydration:** `ProjectionOptions` accepts an `ssrSource` field
  * (`"server"` | `"hybrid"` | `"client"`) for the same client-vs-server
  * tradeoffs as the other primitives. See {@link HydrationSsrFields}.
  */
 export const createProjection: <T extends object = {}>(
   fn: (draft: T) => void | T | Promise<void | T> | AsyncIterable<void | T>,
   initialValue: T,
-  options?: HydrationProjectionOptions
+  options?: ProjectionOptions
 ) => Refreshable<Store<T>> = ((...args: any[]) =>
   (_createProjection || coreProjection)(...args)) as any;
 
@@ -1079,8 +1075,8 @@ type NoFn<T> = T extends Function ? never : T;
  * );
  * ```
  *
- * **Hydration:** the derived form accepts
- * {@link HydrationProjectionOptions}, which adds an `ssrSource` field
+ * **Hydration:** the derived form accepts `ProjectionOptions`, including
+ * an `ssrSource` field
  * (`"server"` | `"hybrid"` | `"client"`). See {@link HydrationSsrFields}.
  *
  * @returns `[store: Store<T>, setStore: StoreSetter<T>]`
@@ -1090,7 +1086,7 @@ export const createStore: {
   <T extends object = {}>(
     fn: (store: T) => void | T | Promise<void | T> | AsyncIterable<void | T>,
     store: NoFn<T> | Store<NoFn<T>>,
-    options?: HydrationProjectionOptions
+    options?: ProjectionOptions
   ): [get: Refreshable<Store<T>>, set: StoreSetter<T>];
 } = ((...args: any[]) => (_createStore || coreStore)(...args)) as any;
 
@@ -1134,8 +1130,8 @@ export const createStore: {
  * });
  * ```
  *
- * **Hydration:** the derived form accepts
- * {@link HydrationProjectionOptions}, which adds an `ssrSource` field
+ * **Hydration:** the derived form accepts `ProjectionOptions`, including
+ * an `ssrSource` field
  * (`"server"` | `"hybrid"` | `"client"`). See {@link HydrationSsrFields}.
  *
  * @returns `[store: Store<T>, setStore: StoreSetter<T>]`
@@ -1145,7 +1141,7 @@ export const createOptimisticStore: {
   <T extends object = {}>(
     fn: (store: T) => void | T | Promise<void | T> | AsyncIterable<void | T>,
     store: NoFn<T> | Store<NoFn<T>>,
-    options?: HydrationProjectionOptions
+    options?: ProjectionOptions
   ): [get: Refreshable<Store<T>>, set: StoreSetter<T>];
 } = ((...args: any[]) => (_createOptimisticStore || coreOptimisticStore)(...args)) as any;
 
