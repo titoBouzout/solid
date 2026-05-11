@@ -6,12 +6,16 @@
 
 import { defineConfig } from "vitest/config";
 import solidPlugin from "vite-plugin-solid";
+import codspeedPlugin from "@codspeed/vitest-plugin";
 import { resolve } from "path";
 
 const rootDir = resolve(import.meta.dirname);
 
 export default defineConfig({
-  plugins: [solidPlugin({ solid: { generate: "ssr", hydratable: true } })],
+  plugins: [
+    solidPlugin({ solid: { generate: "ssr", hydratable: true } }),
+    codspeedPlugin()
+  ],
   test: {
     environment: "node",
     include: ["test/server/**/*.bench.tsx"],

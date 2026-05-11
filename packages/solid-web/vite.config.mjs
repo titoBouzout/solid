@@ -2,12 +2,13 @@
 
 import { defineConfig } from "vitest/config";
 import solidPlugin from "vite-plugin-solid";
+import codspeedPlugin from "@codspeed/vitest-plugin";
 import { resolve } from "path";
 
 const rootDir = resolve(__dirname);
 
 export default defineConfig({
-  plugins: [solidPlugin()],
+  plugins: [solidPlugin(), codspeedPlugin()],
   server: {
     port: 3000
   },
