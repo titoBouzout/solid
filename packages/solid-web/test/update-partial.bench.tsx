@@ -38,9 +38,6 @@ function ownerTotal(node: any): number {
 }
 
 const cleanups: Array<() => void> = [];
-afterAll(() => {
-  for (const dispose of cleanups) dispose();
-});
 
 let rootOwner!: any;
 let rows!: Row[];
@@ -82,7 +79,7 @@ bench("update-partial: 100/1000 rows × 16 iterations", () => {
 
 afterAll(() => {
   const finalOwners = ownerTotal(rootOwner);
-  // Updates should not change owner-tree shape at all.
+  for (const dispose of cleanups) dispose();
   if (finalOwners !== baselineOwners) {
     throw new Error(
       `Owner-tree drift on update path: baseline=${baselineOwners}, final=${finalOwners}`

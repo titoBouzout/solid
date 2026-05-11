@@ -10,7 +10,8 @@ import {
   flush,
   isPending,
   latest,
-  refresh
+  refresh,
+  type SourceAccessor
 } from "../src/index.js";
 
 afterEach(() => flush());
@@ -305,7 +306,7 @@ describe("createOptimistic", () => {
 
     it("refreshing an optimistic accessor does not throw upstream pending reads (#2694)", async () => {
       let sendMessage!: () => void;
-      let optimistic!: () => string;
+      let optimistic!: SourceAccessor<string>;
       let resolveCount!: (value: string) => void;
 
       createRoot(() => {

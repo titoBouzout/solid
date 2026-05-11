@@ -41,9 +41,6 @@ function ownerTotal(node: any): number {
 }
 
 const cleanups: Array<() => void> = [];
-afterAll(() => {
-  for (const dispose of cleanups) dispose();
-});
 
 let rootOwner!: any;
 let setRows!: (next: Row[]) => Row[];
@@ -93,6 +90,7 @@ bench("mount-clear-cycle: 1000 rows", () => {
 
 afterAll(() => {
   const finalOwners = ownerTotal(rootOwner);
+  for (const dispose of cleanups) dispose();
   if (finalOwners - baselineOwners > 5) {
     throw new Error(
       `Owner leak detected after bench iterations: baseline=${baselineOwners}, final=${finalOwners}`

@@ -28,14 +28,14 @@ jobs:
       - name: Installing deps
         run: pnpm install
 
-      - name: Building
-        run: pnpm run build
+      - name: Building (packages only)
+        run: pnpm turbo run build --filter=!./examples/* --filter=!test-integration
 
       - name: Run benchmarks under CodSpeed
         uses: CodSpeedHQ/action@v4
         with:
           mode: simulation
           run: |
-            pnpm --filter solid-signals run bench
+            pnpm --filter @solidjs/signals run bench
             pnpm --filter @solidjs/web run bench
             pnpm --filter @solidjs/web run bench:server

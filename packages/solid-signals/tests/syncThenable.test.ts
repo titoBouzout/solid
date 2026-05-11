@@ -1,11 +1,12 @@
 import {
-  createEffect,
   createMemo,
   createRenderEffect,
   createRoot,
   createSignal,
   flush,
-  onCleanup
+  onCleanup,
+  refresh,
+  type SourceAccessor
 } from "../src/index.js";
 
 afterEach(() => flush());
@@ -440,7 +441,7 @@ describe("fromObservable pattern", () => {
     // For ongoing async updates, use refresh() to trigger recomputation
     // which resubscribes and gets the latest value
     const subject = createBehaviorSubject(1);
-    let signal: () => number;
+    let signal: SourceAccessor<number>;
 
     createRoot(() => {
       signal = createMemo(() => fromObservable(subject));
@@ -452,7 +453,6 @@ describe("fromObservable pattern", () => {
     // Update the subject, then refresh the memo to resubscribe
     subject.next(2);
     // Refresh triggers recomputation -> resubscribes -> gets current value
-    const { refresh } = await import("../src/index.js");
     refresh(signal!);
     flush();
     expect(signal!()).toBe(2);
