@@ -17,12 +17,7 @@ export default defineConfig({
       exclude: ["**/*.d.ts", "src/server/*.ts"]
     },
     environment: "jsdom",
-    // otherwise, solid would be loaded twice:
-    deps: { registerNodeLoader: true },
-    // if you have few tests, try commenting one
-    // or both out to improve performance:
-    threads: false,
-    isolate: false,
+    pool: "threads",
     globals: true,
     exclude: ["**/node_modules/**", "archived_tests/**"]
   },

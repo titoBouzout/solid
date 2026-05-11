@@ -12,8 +12,7 @@ export default defineConfig({
     environment: "node",
     include: ["test/server/**/*.spec.tsx"],
     globals: true,
-    threads: false,
-    isolate: false,
+    pool: "threads",
   },
   resolve: {
     conditions: ["node"],

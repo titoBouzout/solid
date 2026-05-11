@@ -20,13 +20,7 @@ export default defineConfig({
       exclude: ["**/*.d.ts", "src/server/*.ts"]
     },
     environment: "jsdom",
-    transformMode: { web: [/\.[jt]sx?$/] },
-    // otherwise, solid would be loaded twice:
-    deps: { registerNodeLoader: true },
-    // if you have few tests, try commenting one
-    // or both out to improve performance:
-    threads: false,
-    isolate: false,
+    pool: "threads",
     globals: true,
     exclude: ["**/node_modules/**", "wip_tests/**", "test/server/**", "test/hydration/**"],
     // Bench mode reads `benchmark.exclude` separately from `test.exclude`.

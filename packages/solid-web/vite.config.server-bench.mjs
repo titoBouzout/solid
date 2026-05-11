@@ -20,8 +20,7 @@ export default defineConfig({
     environment: "node",
     include: ["test/server/**/*.bench.tsx"],
     globals: true,
-    threads: false,
-    isolate: false,
+    pool: "threads",
     benchmark: {
       include: ["test/server/**/*.bench.tsx"],
       exclude: ["**/node_modules/**", "test/*.bench.tsx"]

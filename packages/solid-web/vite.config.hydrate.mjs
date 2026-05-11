@@ -10,10 +10,7 @@ export default defineConfig({
   plugins: [solidPlugin({ solid: { dev: true, hydratable: true } })],
   test: {
     environment: "jsdom",
-    transformMode: { web: [/\.[jt]sx?$/] },
-    deps: { registerNodeLoader: true },
-    threads: false,
-    isolate: false,
+    pool: "threads",
     globals: true,
     include: ["test/hydration/**/*.spec.tsx"]
   },

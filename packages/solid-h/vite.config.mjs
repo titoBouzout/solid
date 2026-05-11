@@ -5,9 +5,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "jsdom",
-    deps: { registerNodeLoader: true },
-    threads: false,
-    isolate: false,
+    pool: "threads",
     globals: true,
     exclude: ["**/node_modules/**"]
   },

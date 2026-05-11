@@ -12,7 +12,8 @@ import {
 
 it("should let errors bubble up when not handled", () => {
   const error = new Error();
-  expect(() => {
+  let caught: any;
+  try {
     createRoot(() => {
       createRenderEffect(
         () => {
@@ -22,7 +23,11 @@ it("should let errors bubble up when not handled", () => {
       );
     });
     flush();
-  }).toThrowError(error);
+  } catch (e) {
+    caught = e;
+  }
+  expect(caught).toBeDefined();
+  expect(caught.cause ?? caught).toBe(error);
 });
 
 it("should handle error", () => {
@@ -130,13 +135,18 @@ it("should throw error if there are no handlers left", () => {
     });
 
   createRoot(() => {
-    expect(() => {
+    let caught: any;
+    try {
       createErrorBoundary(() => {
         createErrorBoundary(() => {
           throw error;
         }, handler)();
       }, handler)();
-    }).toThrow(error);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeDefined();
+    expect(caught.cause ?? caught).toBe(error);
   });
 
   expect(handler).toHaveBeenCalledTimes(2);
