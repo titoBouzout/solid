@@ -3,6 +3,7 @@
   "compilerOptions": {
     "outDir": "./types",
     "baseUrl": "src",
+    "rootDir": "./src",
     "paths": {
       "@solidjs/h": ["../.."]
     }

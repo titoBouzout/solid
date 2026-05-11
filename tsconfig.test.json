@@ -12,7 +12,8 @@
     // https://github.com/alexeyraspopov/picocolors/issues/50
     "allowSyntheticDefaultImports": true,
     // Allows TS to see the Vitest globals
-    "types": ["vitest/globals"]
+    "types": ["vitest/globals"],
+    "ignoreDeprecations": "6.0"
   },
   "exclude": ["node_modules"]
 }

@@ -3,6 +3,8 @@
   "compilerOptions": {
     "outDir": "./types",
     "baseUrl": "./src",
+    "rootDir": "..",
+    "types": ["node"],
     "paths": {
       "@solidjs/web": ["../../src/index.ts"]
     }

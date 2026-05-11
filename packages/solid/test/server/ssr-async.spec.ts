@@ -3016,7 +3016,7 @@ describe("Async Iterable — createProjection", () => {
             draft.name = "fromGen";
             yield;
           },
-          { name: "init" }
+          { name: "init" } as any
         );
       },
       { id: "t" }

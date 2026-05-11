@@ -1719,7 +1719,7 @@ describe("ssrSource 'hybrid' — async generator transition", () => {
               }
             };
           },
-          { count: 0 },
+          { count: 0 } as any,
           { ssrSource: "hybrid" }
         );
       },
