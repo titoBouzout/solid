@@ -94,6 +94,17 @@ function handleSubmit() {
 
 **`batch` is removed;** `flush()` is the way to synchronously apply pending updates.
 
+`flush` also accepts a callback:
+
+```js
+flush(() => {
+  setSubmitted(true);
+  setCount(count() + 1);
+}); // callback updates are applied before flush returns
+```
+
+Use `flush(fn)` at imperative boundaries where the writes themselves should run in a synchronous flush scope. Writes inside the callback do not schedule the normal microtask flush; they are drained before `flush(fn)` returns, so you can update state and immediately read reactive values or DOM without leaving a queued flush behind. The callback's return value is preserved, and nested `flush(fn)` calls drain at each level.
+
 ### Split tracking from effect
 
 Effects have two phases: **compute** (reactive reads only; dependencies recorded) and **effect** (side effects; runs after all compute phases in the batch). This gives a clear dependency picture before any side effects run and is required for async and boundaries.
