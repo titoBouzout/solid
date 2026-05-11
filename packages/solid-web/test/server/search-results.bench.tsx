@@ -15,6 +15,9 @@
 // fast-feedback loop without round-tripping through the external repo.
 // Vitest's reported mean is the full `renderToString` cycle.
 
+/**
+ * @jsxImportSource @solidjs/web
+ */
 import { bench } from "vitest";
 import { renderToString } from "@solidjs/web";
 import { createSignal, For } from "solid-js";
@@ -35,19 +38,21 @@ const ITEMS: SearchItem[] = Array.from({ length: 50 }, (_, i) => ({
 
 function Item(props: { item: SearchItem }) {
   const [purchased] = createSignal(false);
+  const { id, title, image, price } = props.item;
+
   return (
     <div class="search-results-item" style={{ "background-color": purchased() ? "#f1c40f" : "" }}>
-      <h2 textContent={props.item.title} />
+      <h2 textContent={title} />
 
       <div class="lvpic pic img left">
         <div class="lvpicinner full-width picW">
-          <a href={"/buy/" + props.item.id} class="img imgWr2">
-            <img src={props.item.image} alt={props.item.title} />
+          <a href={"/buy/" + id} class="img imgWr2">
+            <img src={image} alt={title} />
           </a>
         </div>
       </div>
 
-      <span class="price" textContent={props.item.price} />
+      <span class="price" textContent={price} />
 
       {purchased() ? (
         <div class="purchased">Purchased!</div>
@@ -64,7 +69,12 @@ function App() {
   return (
     <div class="search-results">
       <div>
-        <For each={ITEMS}>{item => <Item item={item} />}</For>
+        <For each={ITEMS}>
+          {item => {
+            const i = item();
+            return <Item item={i} />;
+          }}
+        </For>
       </div>
     </div>
   );

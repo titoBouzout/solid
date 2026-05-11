@@ -16,6 +16,9 @@
 // measures *delta* between baseline and probe on the same machine, which
 // is enough to gate the AI loop without bouncing to the external repo.
 
+/**
+ * @jsxImportSource @solidjs/web
+ */
 import { bench } from "vitest";
 import { renderToString } from "@solidjs/web";
 import { createSignal, For } from "solid-js";
