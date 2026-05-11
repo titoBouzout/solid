@@ -80,7 +80,9 @@ bench("update-partial: 100/1000 rows × 16 iterations", () => {
 afterAll(() => {
   const finalOwners = ownerTotal(rootOwner);
   for (const dispose of cleanups) dispose();
-  if (finalOwners !== baselineOwners) {
+  // CodSpeed simulation mode disposes the bench's owner subtree before
+  // afterAll fires, so the strict drift gate only runs in the local dev path.
+  if (!process.env.CODSPEED_RUNNER_MODE && finalOwners !== baselineOwners) {
     throw new Error(
       `Owner-tree drift on update path: baseline=${baselineOwners}, final=${finalOwners}`
     );
