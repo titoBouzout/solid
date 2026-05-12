@@ -44,16 +44,12 @@ function TodoItem(props: { todo: Todo }) {
           class="toggle"
           type="checkbox"
           checked={props.todo.completed}
-          onChange={() => toggleTodo(props.todo.id, !props.todo.completed)}
+          onInput={e => toggleTodo(props.todo.id, e.currentTarget.checked)}
         />
         <label>{props.todo.title}</label>
-        <Show when={props.todo.error}>
-          {err => (
-            <button
-              class="retry"
-              title={`Retry ${err().type}`}
-              onClick={() => retryTodo(props.todo)}
-            />
+        <Show when={props.todo.error} keyed>
+          {({ type }) => (
+            <button class="retry" title={`Retry ${type}`} onClick={() => retryTodo(props.todo)} />
           )}
         </Show>
         <button class="destroy" onClick={() => removeTodo(props.todo.id)} />
@@ -118,7 +114,7 @@ function Footer(props: { filter: Filter }) {
           </li>
         </ul>
         <Show when={completed() > 0}>
-          <button class="clear-completed" onClick={() => clearCompleted()}>
+          <button class="clear-completed" onClick={clearCompleted}>
             Clear completed
           </button>
         </Show>

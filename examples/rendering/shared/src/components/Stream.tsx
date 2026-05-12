@@ -49,7 +49,7 @@ const Stream = () => {
               <For each={memoItems()}>
                 {item => (
                   <li>
-                    {item().id}: {item().text}
+                    {item.id}: {item.text}
                   </li>
                 )}
               </For>
