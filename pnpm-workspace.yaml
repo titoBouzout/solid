@@ -1,3 +1,17 @@
 packages:
   - 'packages/*'
   - 'examples/*'
+
+allowBuilds:
+  esbuild: true
+  simple-git-hooks: true
+
+minimumReleaseAgeExclude:
+  - babel-plugin-jsx-dom-expressions
+  - dom-expressions
+  - hyper-dom-expressions
+  - sld-dom-expressions
+
+overrides:
+  babel-preset-solid: workspace:*
+  '@solidjs/signals': workspace:*

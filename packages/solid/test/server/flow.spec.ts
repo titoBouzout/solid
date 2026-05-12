@@ -464,9 +464,12 @@ describe("Server owner ID parity for SSR helpers", () => {
     createRoot(
       () => {
         const merged = merge({ a: 1 }, () => ({ b: 2 }));
+        const mergedAgain = merge({ c: 3 }, merged);
         const after = createMemo(() => (getOwner() as any)?.id, { sync: true });
 
         expect(merged.b).toBe(2);
+        expect(Object.keys(merged)).toEqual(["a", "b"]);
+        expect(Object.keys(mergedAgain)).toEqual(["c", "a", "b"]);
         expect(after()).toBe("t1");
       },
       { id: "t" }

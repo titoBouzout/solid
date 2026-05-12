@@ -13,9 +13,11 @@ const [count] = createSignal(1);
 <Show when={count()}>{() => <div />}</Show>;
 // @ts-expect-error bare accessors should be invoked before being passed as JSX children
 <Show when={count()}>{count}</Show>;
-// @ts-expect-error keyed Show passes a raw value, not an accessor
 <Show when={count()} keyed>
-  {value => <div>{value()}</div>}
+  {value => (
+    // @ts-expect-error keyed Show passes a raw value, not an accessor
+    <div>{value()}</div>
+  )}
 </Show>;
 
 <Switch fallback={<div>fallback</div>}>
@@ -31,9 +33,11 @@ const [count] = createSignal(1);
   {value => <div>{value.toFixed()}</div>}
 </Match>;
 <Match when={count()}>{count()}</Match>;
-// @ts-expect-error keyed Match passes a raw value, not an accessor
 <Match when={count()} keyed>
-  {value => <div>{value()}</div>}
+  {value => (
+    // @ts-expect-error keyed Match passes a raw value, not an accessor
+    <div>{value()}</div>
+  )}
 </Match>;
 
 const rows = [{ id: "a", label: "A" }];
@@ -49,11 +53,15 @@ const rows = [{ id: "a", label: "A" }];
 </For>;
 // @ts-expect-error default For passes a raw row, not an accessor
 <For each={rows}>{row => <div>{row().label}</div>}</For>;
-// @ts-expect-error keyed:false passes a raw index, not an accessor
 <For each={rows} keyed={false}>
-  {(row, index) => <div>{index()}</div>}
+  {(row, index) => (
+    // @ts-expect-error keyed:false passes a raw index, not an accessor
+    <div>{index()}</div>
+  )}
 </For>;
-// @ts-expect-error key-function For passes an item accessor, not a raw row
 <For each={rows} keyed={row => row.id}>
-  {row => <div>{row.label}</div>}
+  {row => (
+    // @ts-expect-error key-function For passes an item accessor, not a raw row
+    <div>{row.label}</div>
+  )}
 </For>;
