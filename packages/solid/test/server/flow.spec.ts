@@ -10,7 +10,10 @@ import {
   Errored,
   Loading,
   getOwner,
-  mapArray
+  mapArray,
+  repeat,
+  createMemo,
+  merge
 } from "../../src/server/index.js";
 
 describe("Server For", () => {
@@ -422,10 +425,67 @@ describe("Server mapArray ID parity (base-36)", () => {
         });
         typeof result === "function" ? (result as any)() : result;
 
-        // For → mapArray (memo + parent owner); item owners under mapArray parent
-        // Item owners under t1: t10, t11, ..., t19, t1a
+        // For → mapArray (memo row owner + consumed computed slot)
+        // Item owners under t0: t00, t01, ..., t09, t0a
         expect(itemOwnerIds[10]).toMatch(/a$/);
         expect(itemOwnerIds[10]).not.toMatch(/10$/);
+      },
+      { id: "t" }
+    );
+  });
+});
+
+describe("Server owner ID parity for SSR helpers", () => {
+  test("merge with function source consumes an SSR memo slot", () => {
+    createRoot(
+      () => {
+        const merged = merge({ a: 1 }, () => ({ b: 2 }));
+        const after = createMemo(() => (getOwner() as any)?.id, { sync: true });
+
+        expect(merged.b).toBe(2);
+        expect(after()).toBe("t1");
+      },
+      { id: "t" }
+    );
+  });
+
+  test("mapArray consumes client-aligned row owner and computed slots", () => {
+    createRoot(
+      () => {
+        const itemOwnerIds: (string | undefined)[] = [];
+        const mapped = mapArray(
+          () => [1, 2, 3],
+          item => {
+            itemOwnerIds.push((getOwner() as any)?.id);
+            return item();
+          }
+        );
+        const after = createMemo(() => (getOwner() as any)?.id, { sync: true });
+
+        expect(mapped()).toEqual([1, 2, 3]);
+        expect(itemOwnerIds).toEqual(["t00", "t01", "t02"]);
+        expect(after()).toBe("t2");
+      },
+      { id: "t" }
+    );
+  });
+
+  test("repeat consumes client-aligned row owner and computed slots", () => {
+    createRoot(
+      () => {
+        const itemOwnerIds: (string | undefined)[] = [];
+        const repeated = repeat(
+          () => 3,
+          i => {
+            itemOwnerIds.push((getOwner() as any)?.id);
+            return i;
+          }
+        );
+        const after = createMemo(() => (getOwner() as any)?.id, { sync: true });
+
+        expect(repeated()).toEqual([0, 1, 2]);
+        expect(itemOwnerIds).toEqual(["t00", "t01", "t02"]);
+        expect(after()).toBe("t2");
       },
       { id: "t" }
     );

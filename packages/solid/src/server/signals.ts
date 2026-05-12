@@ -26,7 +26,7 @@ export {
 } from "@solidjs/signals";
 
 export { flatten } from "@solidjs/signals";
-export { snapshot, merge, omit, storePath, $PROXY, $TRACK } from "@solidjs/signals";
+export { snapshot, omit, storePath, $PROXY, $TRACK } from "@solidjs/signals";
 
 // === Type re-exports ===
 
@@ -70,7 +70,14 @@ export type {
 
 // === Local imports ===
 
-import { isWrappable, NotReadyError, NoOwnerError, ContextNotFoundError } from "@solidjs/signals";
+import {
+  $PROXY,
+  isWrappable,
+  merge as signalMerge,
+  NotReadyError,
+  NoOwnerError,
+  ContextNotFoundError
+} from "@solidjs/signals";
 
 import type {
   Accessor,
@@ -82,6 +89,7 @@ import type {
   SignalOptions,
   Setter,
   Signal,
+  Merge,
   Owner,
   Store,
   StoreSetter,
@@ -148,6 +156,10 @@ function nextChildIdFor(owner: SSROwner, consume: boolean): string {
     return formatChildId(counter.id, consume ? counter._childCount++ : counter._childCount);
   }
   throw new Error("Cannot get child id from owner without an id");
+}
+
+function consumeClientComputedSlot(owner: SSROwner | null): void {
+  if (owner?.id != null) nextChildIdFor(owner, true);
 }
 
 export function getNextChildId(owner: Owner): string {
@@ -1242,6 +1254,41 @@ export function deep<T extends object>(store: Store<T>): Store<T> {
   return store;
 }
 
+function proxySource(read: Accessor<any>) {
+  return new Proxy({} as any, {
+    get(_, property, receiver) {
+      if (property === $PROXY) return receiver;
+      const source = read() || {};
+      return source[property];
+    },
+    has(_, property) {
+      if (property === $PROXY) return true;
+      return property in (read() || {});
+    },
+    ownKeys() {
+      return Object.keys(read() || {});
+    },
+    getOwnPropertyDescriptor(_, property) {
+      return {
+        configurable: true,
+        enumerable: true,
+        get() {
+          return (read() || {})[property];
+        }
+      };
+    }
+  });
+}
+
+export function merge<T extends unknown[]>(...sources: T): Merge<T> {
+  for (let i = 0; i < sources.length; i++) {
+    if (typeof sources[i] === "function") {
+      sources[i] = proxySource(createMemo(sources[i] as () => any)) as T[number];
+    }
+  }
+  return signalMerge(...sources) as Merge<T>;
+}
+
 // === Array mapping ===
 
 export function mapArray<T, U>(
@@ -1269,7 +1316,8 @@ export function mapArray<T, U>(
   //    sync memos, `_$memo()`, boundaries). Their ids and captured state are
   //    snapshotted at owner-creation time, so restoring `parent.id` afterwards
   //    doesn't disturb them.
-  return createMemo(
+  const parent = currentOwner;
+  const read = createMemo(
     () => {
       const items = list();
       const s: U[] = [];
@@ -1302,6 +1350,8 @@ export function mapArray<T, U>(
     },
     { sync: true }
   );
+  consumeClientComputedSlot(parent);
+  return read;
 }
 
 export function repeat<T>(
@@ -1310,7 +1360,8 @@ export function repeat<T>(
   options: { fallback?: Accessor<any>; from?: Accessor<number | undefined> } = {}
 ): () => T[] {
   // See mapArray — same per-row owner elision via id mutation.
-  return createMemo(
+  const parent = currentOwner;
+  const read = createMemo(
     () => {
       const len = count();
       const offset = options.from?.() || 0;
@@ -1339,6 +1390,8 @@ export function repeat<T>(
     },
     { sync: true }
   );
+  consumeClientComputedSlot(parent);
+  return read;
 }
 
 // === Boundary primitives ===
