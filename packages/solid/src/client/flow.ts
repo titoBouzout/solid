@@ -35,6 +35,13 @@ const narrowedError = (name: string) =>
  * Receives a map function as its child and returns a JSX element for each
  * list item; if the list is empty, an optional `fallback` is rendered instead.
  *
+ * The child callback shape follows the keying mode:
+ * - default / `keyed={true}` receives `(item, index)` where `item` is the raw
+ *   row value and `index` is an accessor.
+ * - `keyed={false}` receives `(item, index)` where `item` is an accessor and
+ *   `index` is a stable number.
+ * - `keyed={(item) => key}` receives accessors for both arguments.
+ *
  * @example
  * ```tsx
  * <For each={items} fallback={<div>No items</div>}>

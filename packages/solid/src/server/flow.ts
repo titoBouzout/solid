@@ -37,7 +37,6 @@ type ForOptions<T> = {
 
 /**
  * Creates a list of elements from a list
- *
  * @description https://docs.solidjs.com/reference/components/for
  */
 export function For<T extends readonly any[], U extends SolidElement>(props: {

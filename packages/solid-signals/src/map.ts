@@ -16,9 +16,14 @@ export type Maybe<T> = T | void | null | undefined | false;
 
 /**
  * Reactively maps an array, reusing the previously-mapped value for unchanged
- * items. By default, the callback receives the raw row value and a reactive
- * index accessor. Index-owned and custom-keyed rows receive accessors where
- * the row can be preserved while that argument changes.
+ * items.
+ *
+ * The callback shape follows the keying mode:
+ * - default / `keyed: true` receives `(item, index)` where `item` is the raw
+ *   row value and `index` is an accessor.
+ * - `keyed: false` receives `(item, index)` where `item` is an accessor and
+ *   `index` is a stable number.
+ * - `keyed: item => key` receives accessors for both arguments.
  *
  * This is the underlying helper that powers `<For>`. App code should use
  * `<For>` directly; reach for `mapArray` when implementing custom list
