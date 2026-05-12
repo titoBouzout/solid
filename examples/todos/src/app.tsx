@@ -47,9 +47,13 @@ function TodoItem(props: { todo: Todo }) {
           onInput={e => toggleTodo(props.todo.id, e.currentTarget.checked)}
         />
         <label>{props.todo.title}</label>
-        <Show when={props.todo.error} keyed>
-          {({ type }) => (
-            <button class="retry" title={`Retry ${type}`} onClick={() => retryTodo(props.todo)} />
+        <Show when={props.todo.error}>
+          {error => (
+            <button
+              class="retry"
+              title={`Retry ${error().type}`}
+              onClick={() => retryTodo(props.todo)}
+            />
           )}
         </Show>
         <button class="destroy" onClick={() => removeTodo(props.todo.id)} />

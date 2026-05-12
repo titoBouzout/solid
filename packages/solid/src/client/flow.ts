@@ -202,7 +202,7 @@ export function Show<T>(props: {
         const fn = typeof child === "function" && child.length > 0;
         return fn
           ? keyed
-            ? untrack(() => (child as any)(conditionValue()), IS_DEV && "<Show>")
+            ? untrack(() => (child as any)(c), IS_DEV && "<Show>")
             : untrack(
                 () =>
                   (child as any)(() => {
@@ -219,7 +219,7 @@ export function Show<T>(props: {
   ) as unknown as SolidElement;
 }
 
-type EvalConditions = readonly [number, Accessor<unknown>, AnyMatchProps<unknown>];
+type EvalConditions = readonly [number, unknown, Accessor<unknown>, AnyMatchProps<unknown>];
 
 /**
  * Switches between content based on mutually exclusive conditions. Renders
@@ -270,7 +270,12 @@ export function Switch(props: { fallback?: SolidElement; children: SolidElement 
                   }
                 : { equals: (a, b) => !a === !b, sync: true }
             );
-        func = () => prevFunc() || (condition() ? [index, conditionValue, mp] : undefined);
+        func = () => {
+          const prev = prevFunc();
+          if (prev) return prev;
+          const c = condition();
+          return c ? [index, c, conditionValue, mp] : undefined;
+        };
       }
       return func;
     },
@@ -280,12 +285,12 @@ export function Switch(props: { fallback?: SolidElement; children: SolidElement 
     () => {
       const sel = switchFunc()();
       if (!sel) return props.fallback;
-      const [index, conditionValue, mp] = sel;
+      const [index, value, conditionValue, mp] = sel;
       const child = mp.children;
       const fn = typeof child === "function" && child.length > 0;
       return fn
         ? mp.keyed
-          ? untrack(() => (child as any)(conditionValue()), IS_DEV && "<Match>")
+          ? untrack(() => (child as any)(value), IS_DEV && "<Match>")
           : untrack(
               () =>
                 (child as any)(() => {

@@ -7,6 +7,9 @@ import {
   createEffect,
   createSignal,
   createStore,
+  Show,
+  Switch,
+  Match,
   untrack,
   flush,
   $DEVCOMP,
@@ -141,6 +144,92 @@ describe("Strict Read Warning", () => {
     });
 
     expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  test("does not warn when keyed Show passes a store value to function children", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    createRoot(() => {
+      const [store] = createStore({ error: { type: "network" } as { type: string } | undefined });
+      createComponent(Show, {
+        get when() {
+          return store.error;
+        },
+        keyed: true,
+        children: (_error: { type: string }) => null
+      });
+    });
+
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  test("warns when keyed Show children read properties from store values during setup", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    createRoot(() => {
+      const [store] = createStore({ error: { type: "network" } as { type: string } | undefined });
+      createComponent(Show, {
+        get when() {
+          return store.error;
+        },
+        keyed: true,
+        children: (error: { type: string }) => error.type
+      });
+    });
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toMatch(/<Show>/);
+    warn.mockRestore();
+  });
+
+  test("does not warn when keyed Match passes a store value to function children", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    createRoot(() => {
+      const [store] = createStore({ error: { type: "network" } as { type: string } | undefined });
+      createComponent(Switch, {
+        get children() {
+          return [
+            Match({
+              get when() {
+                return store.error;
+              },
+              keyed: true,
+              children: (_error: { type: string }) => null
+            })
+          ];
+        }
+      });
+    });
+
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  test("warns when keyed Match children read properties from store values during setup", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    createRoot(() => {
+      const [store] = createStore({ error: { type: "network" } as { type: string } | undefined });
+      createComponent(Switch, {
+        get children() {
+          return [
+            Match({
+              get when() {
+                return store.error;
+              },
+              keyed: true,
+              children: (error: { type: string }) => error.type
+            })
+          ];
+        }
+      });
+    });
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toMatch(/<Match>/);
     warn.mockRestore();
   });
 
