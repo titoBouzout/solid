@@ -255,12 +255,12 @@ Optimistic writes revert when the transition completes.
 ```tsx
 // List, keyed by identity (default)
 <For each={items()}>
-  {(item, i) => <Row item={item()} index={i()} />}
+  {(item, i) => <Row item={item} index={i()} />}
 </For>
 
 // List, non-keyed (replaces <Index>)
 <For each={items()} keyed={false}>
-  {(item, i) => <Row item={item()} index={i()} />}
+  {(item, i) => <Row item={item()} index={i} />}
 </For>
 
 // List with custom key
@@ -316,7 +316,8 @@ import { Dynamic } from "@solidjs/web";
 <Dynamic component={isEditing() ? Editor : Viewer} value={value()} />
 ```
 
-`<For>` non-keyed: `item` and `i` are **accessors** — call them: `item()`, `i()`.
+`<For>` non-keyed: `item` is an **accessor** and `i` is a plain number.
+`<For>` default/keyed-by-identity: `item` is a **plain value** and `i` is an accessor.
 `<Repeat>`: `i` is a **plain number**.
 
 ---
@@ -618,8 +619,8 @@ If your training data is 1.x, these are the corrections. **Read this before gene
 - **No top-level reactive reads in component body** — reading signals/props directly at the top of a component warns. Read inside JSX, a memo, or `untrack`.
 - **Props are values, not accessors** — at the call site call accessors (`<X v={count()} />`, not `<X v={count} />`). The single most common AI-generated bug.
 - **Don't destructure props** — `function Comp({ name })` warns; use `props.name` to keep reactivity. (Same root cause as above; see the Props section.)
-- **`<For>` non-keyed children are accessors** — `(item, i) => ...` where `item` and `i` are functions. Call them: `item()`, `i()`.
-- **`<Show>` / `<Match>` function children receive narrowed accessors** — also call them.
+- **`<For>` callback shape follows keying** — default/keyed-by-identity receives a raw item and index accessor; `keyed={false}` receives an item accessor and stable numeric index; custom keys receive accessors.
+- **`<Show>` / `<Match>` function children narrow values** — non-keyed children receive accessors; keyed children receive raw values.
 - **Stores: setters take a draft callback** — mutate the draft in place by default. Returning a new value is shallow (array index-replace, object top-level diff); reach for it for filter/remove. Keyed reconcile is a _projection-fn_ feature, not a setter feature.
 - **`undefined` is a real value in `merge`** — it overrides rather than "skip this key".
 - **Async lives in computations** — return a Promise/AsyncIterable from `createMemo`/`createStore(fn)`/`createProjection`. Reads suspend; wrap in `<Loading>`.

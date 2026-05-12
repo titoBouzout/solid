@@ -65,7 +65,7 @@ describe("@solidjs/h", () => {
           h(For, {
             each: () => items(),
             keyed: true,
-            children: (item: () => { id: number; name: string }) => h("li", () => item().name)
+            children: (item: { id: number; name: string }) => h("li", () => item.name)
           })
         ),
       root
@@ -109,7 +109,7 @@ describe("@solidjs/h", () => {
           h(For, {
             each: () => items(),
             keyed: true,
-            children: (item: () => { name: string }) => h(Row, { name: () => item().name })
+            children: (item: { name: string }) => h(Row, { name: () => item.name })
           })
         ),
       root
@@ -149,8 +149,8 @@ describe("@solidjs/h", () => {
           h(For, {
             each: () => items(),
             keyed: true,
-            children: (item: () => { name: string }, index: () => number) =>
-              h(Row, { name: () => item().name, index: () => index() })
+            children: (item: { name: string }, index: () => number) =>
+              h(Row, { name: () => item.name, index: () => index() })
           })
         ),
       root

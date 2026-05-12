@@ -18,7 +18,7 @@ describe("mapArray keyed:false backed by a store (#2687)", () => {
 
       const mapped = mapArray(
         () => store,
-        (item, i) => ({ getItem: () => item(), getDirect: () => store[i()] }),
+        (item, i) => ({ getItem: () => item(), getDirect: () => store[i] }),
         { keyed: false }
       );
 

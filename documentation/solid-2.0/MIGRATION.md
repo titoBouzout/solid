@@ -10,7 +10,7 @@ This is a short, practical guide for migrating from Solid 1.x to Solid 2.0’s A
 - **Effects**: `createEffect` is split (compute → apply). Cleanup is usually “return a cleanup function”.
 - **Lifecycle**: `onMount` is replaced by `onSettled` (and it can return cleanup).
 - **Async UI**: use `<Loading>` for first readiness; use `isPending(() => expr)` for “refreshing…” indicators.
-- **Lists**: `Index` is gone; use `<For keyed={false}>`. `For` children receive accessors (`item()`/`i()`).
+- **Lists**: `Index` is gone; use `<For keyed={false}>`. Default `For` receives raw items, while `keyed={false}` receives item accessors and a stable numeric index.
 - **Stores**: prefer draft-first setters; `storePath(...)` exists as an opt-in helper for the old path-style ergonomics.
 - **Plain values**: `snapshot(store)` replaces `unwrap(store)` when you need a plain non-reactive value.
 - **DOM**: `use:` directives are removed; use `ref` directive factories (and array refs).
@@ -421,11 +421,15 @@ const [cache] = createStore(
 
 ## Control flow
 
-### List rendering: `Index` is gone, and `For` children use accessors
+### List rendering: `Index` is gone, and `For` handles each keying mode
 
 If you used `Index`, it’s now `For` with `keyed={false}`.
 
-The breaking bit: the `For` child function receives **accessors** for both the item and the index, so you’ll write `item()` / `i()` (not `item` / `i`).
+The callback shape depends on the keying mode:
+
+- Default `For` / `keyed={true}` receives the raw item and an index accessor: `(item, i)`.
+- `keyed={false}` receives an item accessor and a stable numeric index: `(item, i)`. This is the direct `Index` replacement.
+- `keyed={(item) => key}` receives item and index accessors.
 
 ```jsx
 // 1.x
@@ -435,13 +439,15 @@ The breaking bit: the `For` child function receives **accessors** for both the i
 
 // 2.0
 <For each={items()} keyed={false}>
-  {(item, i) => <Row item={item()} index={i()} />}
+  {(item, i) => <Row item={item()} index={i} />}
 </For>
 ```
 
-### Function children often receive accessors (call them!)
+Prefer literal `keyed` modes for function children. A dynamic boolean `keyed={condition()}` makes the callback shape ambiguous.
 
-This isn’t just `For`. A few control-flow APIs pass **accessors** into function children so the value is always safe to read:
+### Function children may receive accessors
+
+Some control-flow APIs pass accessors into function children so the value is always safe to read. This is most relevant when migrating `Index` to `For keyed={false}`:
 
 ```jsx
 <Show when={user()} fallback={<Login />}>

@@ -21,10 +21,19 @@ type NonZeroParams<T extends (...args: any[]) => any> = Parameters<T>["length"] 
   ? never
   : T;
 type ConditionalRenderCallback<T> = (item: Accessor<NonNullable<T>>) => SolidElement;
+type KeyedConditionalRenderCallback<T> = (item: NonNullable<T>) => SolidElement;
 type ConditionalRenderChildren<
   T,
   F extends ConditionalRenderCallback<T> = ConditionalRenderCallback<T>
 > = SolidElement | NonZeroParams<F>;
+type KeyedConditionalRenderChildren<
+  T,
+  F extends KeyedConditionalRenderCallback<T> = KeyedConditionalRenderCallback<T>
+> = SolidElement | NonZeroParams<F>;
+type ForOptions<T> = {
+  keyed?: boolean | ((item: T) => any);
+  fallback?: Accessor<SolidElement>;
+};
 
 /**
  * Creates a list of elements from a list
@@ -34,14 +43,36 @@ type ConditionalRenderChildren<
 export function For<T extends readonly any[], U extends SolidElement>(props: {
   each: T | undefined | null | false;
   fallback?: SolidElement;
-  keyed?: boolean | ((item: T[number]) => any);
+  keyed?: true;
+  children: (item: T[number], index: Accessor<number>) => U;
+}): SolidElement;
+export function For<T extends readonly any[], U extends SolidElement>(props: {
+  each: T | undefined | null | false;
+  fallback?: SolidElement;
+  keyed: false;
+  children: (item: Accessor<T[number]>, index: number) => U;
+}): SolidElement;
+export function For<T extends readonly any[], U extends SolidElement>(props: {
+  each: T | undefined | null | false;
+  fallback?: SolidElement;
+  keyed: (item: T[number]) => any;
   children: (item: Accessor<T[number]>, index: Accessor<number>) => U;
-}) {
-  const options =
+}): SolidElement;
+export function For<T extends readonly any[], U extends SolidElement>(props: {
+  each: T | undefined | null | false;
+  fallback?: SolidElement;
+  keyed?: boolean | ((item: T[number]) => any);
+  children: (item: any, index: any) => U;
+}): SolidElement {
+  const options: ForOptions<T[number]> =
     "fallback" in props
       ? { keyed: props.keyed, fallback: () => props.fallback }
       : { keyed: props.keyed };
-  return mapArray(() => props.each, props.children, options) as unknown as SolidElement;
+  return mapArray(
+    () => props.each,
+    props.children as any,
+    options as any
+  ) as unknown as SolidElement;
 }
 
 /**
@@ -69,11 +100,35 @@ export function Repeat<T extends SolidElement>(props: {
  * Conditionally render its children or an optional fallback component
  * @description https://docs.solidjs.com/reference/components/show
  */
+export function Show<T>(props: {
+  when: T | undefined | null | false;
+  keyed: true;
+  fallback?: SolidElement;
+  children: SolidElement;
+}): SolidElement;
+export function Show<T, F extends KeyedConditionalRenderCallback<T>>(props: {
+  when: T | undefined | null | false;
+  keyed: true;
+  fallback?: SolidElement;
+  children: NonZeroParams<F>;
+}): SolidElement;
+export function Show<T>(props: {
+  when: T | undefined | null | false;
+  keyed?: false;
+  fallback?: SolidElement;
+  children: SolidElement;
+}): SolidElement;
 export function Show<T, F extends ConditionalRenderCallback<T>>(props: {
+  when: T | undefined | null | false;
+  keyed?: false;
+  fallback?: SolidElement;
+  children: NonZeroParams<F>;
+}): SolidElement;
+export function Show<T>(props: {
   when: T | undefined | null | false;
   keyed?: boolean;
   fallback?: SolidElement;
-  children: ConditionalRenderChildren<T, F>;
+  children: SolidElement | ((item: any) => SolidElement);
 }): SolidElement {
   const o = getOwner();
   if (o?.id != null) {
@@ -86,7 +141,9 @@ export function Show<T, F extends ConditionalRenderCallback<T>>(props: {
       if (when) {
         const child = props.children;
         if (typeof child === "function" && child.length > 0) {
-          return (child as any)(() => when as NonNullable<T>);
+          return props.keyed
+            ? (child as any)(when as NonNullable<T>)
+            : (child as any)(() => when as NonNullable<T>);
         }
         return child as SolidElement;
       }
@@ -96,7 +153,7 @@ export function Show<T, F extends ConditionalRenderCallback<T>>(props: {
   ) as unknown as SolidElement;
 }
 
-type EvalConditions = readonly [number, unknown, MatchProps<unknown>];
+type EvalConditions = readonly [number, unknown, AnyMatchProps<unknown>];
 
 /**
  * Switches between content based on mutually exclusive conditions
@@ -109,14 +166,18 @@ export function Switch(props: { fallback?: SolidElement; children: SolidElement 
 
   return createMemo(
     () => {
-      let conds: MatchProps<unknown> | MatchProps<unknown>[] = chs() as any;
+      let conds: AnyMatchProps<unknown> | AnyMatchProps<unknown>[] = chs() as any;
       if (!Array.isArray(conds)) conds = [conds];
 
       for (let i = 0; i < conds.length; i++) {
         const w = conds[i].when;
         if (w) {
           const c = conds[i].children;
-          return typeof c === "function" && c.length > 0 ? (c as any)(() => w) : c;
+          return typeof c === "function" && c.length > 0
+            ? conds[i].keyed
+              ? (c as any)(w)
+              : (c as any)(() => w)
+            : c;
         }
       }
       return props.fallback;
@@ -127,15 +188,48 @@ export function Switch(props: { fallback?: SolidElement; children: SolidElement 
 
 export type MatchProps<T, F extends ConditionalRenderCallback<T> = ConditionalRenderCallback<T>> = {
   when: T | undefined | null | false;
-  keyed?: boolean;
+  keyed?: false;
   children: ConditionalRenderChildren<T, F>;
 };
+export type KeyedMatchProps<
+  T,
+  F extends KeyedConditionalRenderCallback<T> = KeyedConditionalRenderCallback<T>
+> = {
+  when: T | undefined | null | false;
+  keyed: true;
+  children: KeyedConditionalRenderChildren<T, F>;
+};
+export type AnyMatchProps<T> =
+  | MatchProps<T>
+  | KeyedMatchProps<T>
+  | {
+      when: T | undefined | null | false;
+      keyed?: boolean;
+      children: SolidElement;
+    };
 
 /**
  * Selects a content based on condition when inside a `<Switch>` control flow
  * @description https://docs.solidjs.com/reference/components/switch-and-match
  */
-export function Match<T, F extends ConditionalRenderCallback<T>>(props: MatchProps<T, F>) {
+export function Match<T>(props: {
+  when: T | undefined | null | false;
+  keyed: true;
+  children: SolidElement;
+}): SolidElement;
+export function Match<T, F extends KeyedConditionalRenderCallback<T>>(
+  props: KeyedMatchProps<T, F>
+): SolidElement;
+export function Match<T>(props: {
+  when: T | undefined | null | false;
+  keyed?: false;
+  children: SolidElement;
+}): SolidElement;
+export function Match<T, F extends ConditionalRenderCallback<T>>(
+  props: MatchProps<T, F>
+): SolidElement;
+export function Match<T>(props: AnyMatchProps<T>): SolidElement;
+export function Match<T>(props: AnyMatchProps<T>) {
   return props as unknown as SolidElement;
 }
 

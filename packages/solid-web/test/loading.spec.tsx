@@ -242,7 +242,7 @@ describe("Testing Loading", () => {
       return (
         <Show when={page()} keyed>
           {currentPage => (
-            <Loading fallback="loading">{`Page ${currentPage()}: ${source()}`}</Loading>
+            <Loading fallback="loading">{`Page ${currentPage}: ${source()}`}</Loading>
           )}
         </Show>
       );

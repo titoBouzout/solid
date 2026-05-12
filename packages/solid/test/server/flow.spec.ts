@@ -22,7 +22,7 @@ describe("Server For", () => {
       () => {
         const result = For({
           each: [1, 2, 3] as const,
-          children: (item, index) => `${item()}-${index()}`
+          children: (item, index) => `${item}-${index()}`
         });
         // mapArray wraps its read in createMemo (same shape as client signals)
         expect(typeof result === "function" ? (result as any)() : result).toEqual([
@@ -41,7 +41,7 @@ describe("Server For", () => {
         const result = For({
           each: [] as number[],
           fallback: "empty",
-          children: (item, index) => `${item()}`
+          children: item => `${item}`
         });
         expect(typeof result === "function" ? (result as any)() : result).toEqual(["empty"]);
       },
@@ -81,10 +81,19 @@ describe("Server Show", () => {
     expect(typeof result === "function" ? (result as any)() : result).toBe("hidden");
   });
 
-  test("passes accessor to function children", () => {
+  test("passes accessor to non-keyed function children", () => {
     const result = Show({
       when: "hello",
       children: ((item: () => string) => `got: ${item()}`) as any
+    });
+    expect(typeof result === "function" ? (result as any)() : result).toBe("got: hello");
+  });
+
+  test("passes raw value to keyed function children", () => {
+    const result = Show({
+      when: "hello",
+      keyed: true,
+      children: (item: string) => `got: ${item}`
     });
     expect(typeof result === "function" ? (result as any)() : result).toBe("got: hello");
   });
@@ -102,6 +111,21 @@ describe("Server Switch/Match", () => {
           ] as any
         });
         // Switch wraps in createMemo, so result is an accessor
+        expect(typeof result === "function" ? (result as any)() : result).toBe("second");
+      },
+      { id: "test" }
+    );
+  });
+
+  test("passes raw value to keyed matching case", () => {
+    createRoot(
+      () => {
+        const result = Switch({
+          children: [
+            Match({ when: false, children: "first" }),
+            Match({ when: "second", keyed: true, children: value => value })
+          ] as any
+        });
         expect(typeof result === "function" ? (result as any)() : result).toBe("second");
       },
       { id: "test" }
@@ -457,7 +481,7 @@ describe("Server owner ID parity for SSR helpers", () => {
           () => [1, 2, 3],
           item => {
             itemOwnerIds.push((getOwner() as any)?.id);
-            return item();
+            return item;
           }
         );
         const after = createMemo(() => (getOwner() as any)?.id, { sync: true });

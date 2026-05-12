@@ -55,16 +55,13 @@ function App() {
         {COLORS.length ? (
           <ul>
             <For each={COLORS}>
-              {(color, i) => {
-                const { name, hex } = color();
-                return (
-                  <li
-                    class={"color" + (selectedColorIndex() === i() ? " selected" : "")}
-                    style={{ "background-color": hex }}
-                    textContent={name}
-                  />
-                );
-              }}
+              {({ name, hex }, i) => (
+                <li
+                  class={"color" + (selectedColorIndex() === i() ? " selected" : "")}
+                  style={{ "background-color": hex }}
+                  textContent={name}
+                />
+              )}
             </For>
           </ul>
         ) : (

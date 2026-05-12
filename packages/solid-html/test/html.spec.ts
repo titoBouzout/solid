@@ -63,8 +63,8 @@ describe("@solidjs/html", () => {
 
     render(
       () =>
-        tpl`<ul><For each=${() => items()}>${(item: () => { label: string }) =>
-          tpl`<Item label=${() => item().label}/>`}</For></ul>`,
+        tpl`<ul><For each=${() => items()}>${(item: { label: string }) =>
+          tpl`<Item label=${() => item.label}/>`}</For></ul>`,
       root
     );
 

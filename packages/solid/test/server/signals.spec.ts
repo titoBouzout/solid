@@ -323,7 +323,7 @@ describe("Server mapArray", () => {
       () => {
         const mapped = mapArray(
           () => [1, 2, 3],
-          (item, index) => `${item()}-${index()}`
+          (item, index) => `${item}-${index()}`
         );
         expect(mapped()).toEqual(["1-0", "2-1", "3-2"]);
       },
@@ -336,7 +336,7 @@ describe("Server mapArray", () => {
       () => {
         const mapped = mapArray(
           () => [] as number[],
-          (item, index) => item(),
+          item => item,
           { fallback: () => "empty" }
         );
         expect(mapped()).toEqual(["empty"]);
@@ -350,7 +350,7 @@ describe("Server mapArray", () => {
       () => {
         const mapped = mapArray(
           () => null,
-          (item, index) => item(),
+          item => item,
           { fallback: () => "empty" }
         );
         expect(mapped()).toEqual(["empty"]);

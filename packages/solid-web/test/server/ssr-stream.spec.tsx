@@ -390,7 +390,7 @@ describe("SSR Streaming — Flow Controls", () => {
       return (
         <Loading fallback={<span>Loading list...</span>}>
           <ul>
-            <For each={items()}>{item => <li>{item()}</li>}</For>
+            <For each={items()}>{item => <li>{item}</li>}</For>
           </ul>
         </Loading>
       );
@@ -600,7 +600,7 @@ describe("renderToString — Sync Rendering", () => {
         <Show when={false}>
           <p>Hidden</p>
         </Show>
-        <For each={["X", "Y"]}>{item => <span>{item()}</span>}</For>
+        <For each={["X", "Y"]}>{item => <span>{item}</span>}</For>
       </div>
     ));
     expect(html).toContain("Visible");
@@ -1597,7 +1597,7 @@ describe("SSR — insert effect alignment (PR #2592)", () => {
   test("For as template child with sibling", () => {
     const html = renderToString(() => (
       <div>
-        <For each={[1, 2, 3]}>{item => <li>{item()}</li>}</For>
+        <For each={[1, 2, 3]}>{item => <li>{item}</li>}</For>
         <span>after</span>
       </div>
     ));

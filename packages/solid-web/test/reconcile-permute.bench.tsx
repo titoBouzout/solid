@@ -65,10 +65,10 @@ function setup(name: string): Harness {
       container,
       () => (
         <For each={rows()}>
-          {row => (
+          {({ id, label }) => (
             <div>
-              <span>{row().id}</span>
-              <span>{row().label}</span>
+              <span>{id}</span>
+              <span>{label}</span>
             </div>
           )}
         </For>

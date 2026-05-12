@@ -146,13 +146,13 @@ describe("Testing keyed function handler Switch control flow", () => {
     <div ref={div}>
       <Switch fallback={"fallback"}>
         <Match when={a()} keyed>
-          {a => a()}
+          {a => a}
         </Match>
         <Match when={b()} keyed>
-          {b => b()}
+          {b => b}
         </Match>
         <Match when={c()} keyed>
-          {c => c()}
+          {c => c}
         </Match>
       </Switch>
     </div>
@@ -251,7 +251,7 @@ describe("Testing Switch conditions evaluation counts", () => {
         <Match when={a.getAndCount()}>a={a.get()}</Match>
         <Match when={b.getAndCount()}>{b => <>b={b()}</>}</Match>
         <Match when={c.getAndCount()} keyed>
-          {c => <>c={c()}</>}
+          {c => <>c={c}</>}
         </Match>
       </Switch>
     </div>
@@ -402,7 +402,7 @@ describe("Testing a For in a Switch control flow", () => {
     <div ref={div}>
       <Switch fallback={"fallback"}>
         <For each={state.users}>
-          {user => <Match when={user().certified}>{user().firstName}</Match>}
+          {user => <Match when={user.certified}>{user.firstName}</Match>}
         </For>
       </Switch>
     </div>

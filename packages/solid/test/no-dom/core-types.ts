@@ -11,8 +11,19 @@ children((): Element => ["a", 1, false, null]);
 const resolved: ResolvedChildren = "child";
 
 Show({
-  when: value(),
+  get when() {
+    return value();
+  },
   children: current => current(),
+  fallback: resolved
+});
+
+Show({
+  get when() {
+    return value();
+  },
+  keyed: true,
+  children: current => current.toFixed(),
   fallback: resolved
 });
 

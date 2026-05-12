@@ -20,7 +20,7 @@ describe("<For keyed={false}> backed by a store (#2687)", () => {
             {(item, i) => (
               <div>
                 <span class="item">{item()}</span>
-                <span class="store">{store[i()]}</span>
+                <span class="store">{store[i]}</span>
               </div>
             )}
           </For>

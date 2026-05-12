@@ -15,7 +15,7 @@ describe("Testing an only child each control flow", () => {
   const [list, setList] = createSignal([n1, n2, n3, n4]);
   const Component = () => (
     <div ref={div}>
-      <For each={list()}>{item => item()}</For>
+      <For each={list()}>{item => item}</For>
     </div>
   );
 
@@ -99,7 +99,7 @@ describe("Testing an multi child each control flow", () => {
     n3 = "c",
     n4 = "d";
   const [list, setList] = createSignal([n1, n2, n3, n4]);
-  const Component = () => <For each={list()}>{item => item()}</For>;
+  const Component = () => <For each={list()}>{item => item}</For>;
   let disposer: () => void;
 
   function apply(array: string[]) {
@@ -280,7 +280,7 @@ describe("Testing an only child each control flow with array children", () => {
   const [list, setList] = createSignal([n1, n2, n3, n4]);
   const Component = () => (
     <div ref={div}>
-      <For each={list()}>{item => [item(), item()]}</For>
+      <For each={list()}>{item => [item, item]}</For>
     </div>
   );
 
@@ -369,7 +369,7 @@ describe("Testing each control flow with fallback", () => {
   const Component = () => (
     <div ref={div}>
       <For each={list()} fallback={"Empty"}>
-        {item => item()}
+        {item => item}
       </For>
     </div>
   );
@@ -431,7 +431,7 @@ describe("Testing each with indexes", () => {
   const Component = () => (
     <div ref={div}>
       <For each={list()} fallback={"Hi"}>
-        {(item, i) => <span>{item() + i()}</span>}
+        {(item, i) => <span>{item + i()}</span>}
       </For>
     </div>
   );

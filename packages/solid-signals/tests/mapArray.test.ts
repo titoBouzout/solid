@@ -9,7 +9,7 @@ it("should compute keyed map", () => {
     computed();
     return {
       get id() {
-        return value().id;
+        return value.id;
       },
       get index() {
         return index();
@@ -79,7 +79,7 @@ it("should notify observer", () => {
   const map = mapArray($source, value => {
     return {
       get id() {
-        return value().id;
+        return value.id;
       }
     };
   });
@@ -106,7 +106,7 @@ it("should compute map when key by index", () => {
           return value() * 2;
         },
         get index() {
-          return index();
+          return index;
         }
       };
     },
@@ -174,7 +174,7 @@ it("should not retain disposed row owners in the parent's sibling chain across f
 
   let root: any;
   const dispose = createRoot(d => {
-    mapArray($src, item => item().id)();
+    mapArray($src, item => item.id)();
     root = getOwner();
     return d;
   });
@@ -272,4 +272,42 @@ it("should compute custom keyed map", () => {
 
   expect(map().length).toBe(0);
   expect(computed).toHaveBeenCalledTimes(4);
+});
+
+it("should pass a raw item for keyed-by-reference rows", () => {
+  const item = { id: "a" };
+  const [$source] = createSignal([item]);
+  let received: unknown;
+
+  mapArray($source, value => {
+    received = value;
+    return value.id;
+  })();
+
+  expect(received).toBe(item);
+});
+
+it("should pass a raw index for keyed:false rows", () => {
+  const [$source, setSource] = createSignal(["a", "b"]);
+  const map = mapArray(
+    $source,
+    (value, index) => ({
+      get value() {
+        return value();
+      },
+      index
+    }),
+    { keyed: false }
+  );
+
+  const [first] = map();
+  expect(first.value).toBe("a");
+  expect(first.index).toBe(0);
+
+  setSource(["b", "a"]);
+  flush();
+
+  expect(map()[0]).toBe(first);
+  expect(first.value).toBe("b");
+  expect(first.index).toBe(0);
 });

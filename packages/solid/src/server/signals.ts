@@ -294,6 +294,7 @@ export function disposeOwner(owner: Owner, self: boolean = true): void {
     if (self) {
       node._disposed = true;
       if (ownerPool.length < OWNER_POOL_MAX) {
+        node.id = undefined;
         node._parent = null;
         node._nextSibling = null;
         ownerPool.push(node);
@@ -323,6 +324,7 @@ export function disposeOwner(owner: Owner, self: boolean = true): void {
   // already-pooled case so we don't double-add. The next `createOwner` will
   // overwrite all fields, so we only need to drop heavy references here.
   if (self && ownerPool.length < OWNER_POOL_MAX) {
+    node.id = undefined;
     node._parent = null;
     node._nextSibling = null;
     ownerPool.push(node);
@@ -1293,9 +1295,28 @@ export function merge<T extends unknown[]>(...sources: T): Merge<T> {
 
 export function mapArray<T, U>(
   list: Accessor<readonly T[] | undefined | null | false>,
+  mapFn: (v: T, i: Accessor<number>) => U,
+  options?: { keyed?: true; fallback?: Accessor<any> }
+): () => U[];
+export function mapArray<T, U>(
+  list: Accessor<readonly T[] | undefined | null | false>,
+  mapFn: (v: Accessor<T>, i: number) => U,
+  options: { keyed: false; fallback?: Accessor<any> }
+): () => U[];
+export function mapArray<T, U>(
+  list: Accessor<readonly T[] | undefined | null | false>,
   mapFn: (v: Accessor<T>, i: Accessor<number>) => U,
+  options: { keyed: (item: T) => any; fallback?: Accessor<any> }
+): () => U[];
+export function mapArray<T, U>(
+  list: Accessor<readonly T[] | undefined | null | false>,
+  mapFn:
+    | ((v: T, i: Accessor<number>) => U)
+    | ((v: Accessor<T>, i: number) => U)
+    | ((v: Accessor<T>, i: Accessor<number>) => U),
   options: { keyed?: boolean | ((item: T) => any); fallback?: Accessor<any> } = {}
 ): () => U[] {
+  const indexes = mapFn.length > 1;
   // SSR-only optimization: rows reuse the memo owner — no per-row owner
   // allocation, no per-row linked-list link, no per-row dispose walk.
   //
@@ -1332,10 +1353,20 @@ export function mapArray<T, U>(
             }
             parent._childCount = 0;
             s.push(
-              mapFn(
-                () => items[i],
-                () => i
-              )
+              options.keyed === false
+                ? indexes
+                  ? (mapFn as (v: Accessor<T>, i: number) => U)(() => items[i], i)
+                  : (mapFn as (v: Accessor<T>) => U)(() => items[i])
+                : typeof options.keyed === "function"
+                  ? indexes
+                    ? (mapFn as (v: Accessor<T>, i: Accessor<number>) => U)(
+                        () => items[i],
+                        () => i
+                      )
+                    : (mapFn as (v: Accessor<T>) => U)(() => items[i])
+                  : indexes
+                    ? (mapFn as (v: T, i: Accessor<number>) => U)(items[i], () => i)
+                    : (mapFn as (v: T) => U)(items[i])
             );
           }
         } finally {

@@ -16,8 +16,9 @@ export type Maybe<T> = T | void | null | undefined | false;
 
 /**
  * Reactively maps an array, reusing the previously-mapped value for unchanged
- * items. The callback receives `(value, index)` as accessors so individual
- * items and indexes can be subscribed to without re-running the mapper.
+ * items. By default, the callback receives the raw row value and a reactive
+ * index accessor. Index-owned and custom-keyed rows receive accessors where
+ * the row can be preserved while that argument changes.
  *
  * This is the underlying helper that powers `<For>`. App code should use
  * `<For>` directly; reach for `mapArray` when implementing custom list
@@ -33,7 +34,7 @@ export type Maybe<T> = T | void | null | undefined | false;
  * ```ts
  * const view = mapArray(
  *   items,
- *   (item, index) => `${index()}: ${item().label}`,
+ *   (item, index) => `${index()}: ${item.label}`,
  *   { fallback: () => "no items" }
  * );
  * ```
@@ -42,7 +43,25 @@ export type Maybe<T> = T | void | null | undefined | false;
  */
 export function mapArray<Item, MappedItem>(
   list: Accessor<Maybe<readonly Item[]>>,
+  map: (value: Item, index: Accessor<number>) => MappedItem,
+  options?: { keyed?: true; fallback?: Accessor<any>; name?: string }
+): Accessor<MappedItem[]>;
+export function mapArray<Item, MappedItem>(
+  list: Accessor<Maybe<readonly Item[]>>,
+  map: (value: Accessor<Item>, index: number) => MappedItem,
+  options: { keyed: false; fallback?: Accessor<any>; name?: string }
+): Accessor<MappedItem[]>;
+export function mapArray<Item, MappedItem>(
+  list: Accessor<Maybe<readonly Item[]>>,
   map: (value: Accessor<Item>, index: Accessor<number>) => MappedItem,
+  options: { keyed: (item: Item) => any; fallback?: Accessor<any>; name?: string }
+): Accessor<MappedItem[]>;
+export function mapArray<Item, MappedItem>(
+  list: Accessor<Maybe<readonly Item[]>>,
+  map:
+    | ((value: Item, index: Accessor<number>) => MappedItem)
+    | ((value: Accessor<Item>, index: number) => MappedItem)
+    | ((value: Accessor<Item>, index: Accessor<number>) => MappedItem),
   options?: { keyed?: boolean | ((item: Item) => any); fallback?: Accessor<any>; name?: string }
 ): Accessor<MappedItem[]> {
   const keyFn = typeof options?.keyed === "function" ? options.keyed : undefined;
@@ -68,7 +87,8 @@ export function mapArray<Item, MappedItem>(
     _nodes: [],
     _key: keyFn,
     _rows: keyFn || options?.keyed === false ? [] : undefined,
-    _indexes: indexes ? [] : undefined,
+    _indexes: indexes && options?.keyed !== false ? [] : undefined,
+    _byIndex: options?.keyed === false,
     _fallback: options?.fallback
   };
   const node = computed(updateKeyedMap.bind(data as MapData<unknown, unknown>));
@@ -89,23 +109,28 @@ function updateKeyedMap<Item, MappedItem>(this: MapData<Item, MappedItem>): any[
     let i: number,
       j: number,
       mapper = this._rows
-        ? () => {
-            this._rows![j] = signal(newItems[j], pureOptions);
-            this._indexes && (this._indexes![j] = signal(j, pureOptions));
-            return this._map(
-              accessor(this._rows![j]),
-              this._indexes ? accessor(this._indexes![j]) : (undefined as any)
-            );
-          }
+        ? this._byIndex
+          ? () => {
+              this._rows![j] = signal(newItems[j], pureOptions);
+              return this._map(accessor(this._rows![j]), j);
+            }
+          : () => {
+              this._rows![j] = signal(newItems[j], pureOptions);
+              this._indexes && (this._indexes![j] = signal(j, pureOptions));
+              return this._map(
+                accessor(this._rows![j]),
+                this._indexes ? accessor(this._indexes![j]) : (undefined as any)
+              );
+            }
         : this._indexes
           ? () => {
               const item = newItems[j];
               this._indexes![j] = signal(j, pureOptions);
-              return this._map(() => item, accessor<number>(this._indexes![j]));
+              return this._map(item, accessor<number>(this._indexes![j]));
             }
           : () => {
               const item = newItems[j];
-              return (this._map as (value: () => Item) => MappedItem)(() => item);
+              return (this._map as (value: Item) => MappedItem)(item);
             };
 
     // fast path for empty arrays
@@ -374,9 +399,10 @@ interface MapData<Item = any, MappedItem = any> {
   _items: Item[];
   _mappings: MappedItem[];
   _nodes: Root[];
-  _map: (value: Accessor<any>, index: Accessor<number>) => any;
+  _map: (value: any, index: any) => any;
   _key: ((i: any) => any) | undefined;
   _rows?: Signal<Item>[];
   _indexes?: Signal<number>[];
+  _byIndex: boolean;
   _fallback?: Accessor<any>;
 }

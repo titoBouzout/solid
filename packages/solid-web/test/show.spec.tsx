@@ -252,7 +252,7 @@ describe("Testing keyed function show control flow", () => {
       <Show when={count()} keyed>
         {count => (
           <>
-            <span>{count()}</span>
+            <span>{count}</span>
             <span>{executed++}</span>
           </>
         )}
@@ -296,7 +296,7 @@ describe("Testing an only child show control flow with keyed function", () => {
       <Show when={data()} keyed>
         {item => (
           <>
-            <span>{item().count}</span>
+            <span>{item.count}</span>
             <span>counted</span>
           </>
         )}

@@ -473,13 +473,13 @@ describe("createRevealOrder", () => {
       const ordered = createRevealOrder(() => {
         const rows = mapArray($items, item => {
           const value = createMemo(async () => {
-            const id = item();
+            const id = item;
             await pending.get(id)!.promise;
             return `v${id}`;
           });
           return createLoadingBoundary(
             () => value(),
-            () => `l${item()}`
+            () => `l${item}`
           );
         });
         return rows;
@@ -526,13 +526,13 @@ describe("createRevealOrder", () => {
           $items,
           item => {
             const value = createMemo(async () => {
-              const id = item();
+              const id = item;
               await pending.get(id)!.promise;
               return `v${id}`;
             });
             return createLoadingBoundary(
               () => value(),
-              () => `l${item()}`
+              () => `l${item}`
             );
           },
           { keyed: true }
@@ -585,7 +585,7 @@ describe("createRevealOrder", () => {
     createRoot(() => {
       const ordered = createRevealOrder(() => {
         const rows = mapArray($slots, slot => {
-          const id = slot();
+          const id = slot;
           if (id === "a") {
             const a = createMemo(async () => {
               await aReady.promise;
@@ -793,7 +793,7 @@ describe("createRevealOrder", () => {
         const rows = mapArray(
           $slots,
           slot => {
-            const id = slot();
+            const id = slot;
             if (id === "a") {
               const a = createMemo(async () => {
                 await aReady.promise;
@@ -877,13 +877,13 @@ describe("createRevealOrder", () => {
           $items,
           item => {
             const value = createMemo(async () => {
-              const id = item();
+              const id = item;
               await pending.get(id)!.promise;
               return `v${id}`;
             });
             return createLoadingBoundary(
               () => value(),
-              () => `l${item()}`
+              () => `l${item}`
             );
           },
           { keyed: true }
@@ -928,13 +928,13 @@ describe("createRevealOrder", () => {
           $items,
           item => {
             const value = createMemo(async () => {
-              const id = item();
+              const id = item;
               await pending.get(id)!.promise;
               return `v${id}`;
             });
             return createLoadingBoundary(
               () => value(),
-              () => `l${item()}`
+              () => `l${item}`
             );
           },
           { keyed: true }
@@ -981,13 +981,13 @@ describe("createRevealOrder", () => {
           $items,
           item => {
             const value = createMemo(async () => {
-              const id = item();
+              const id = item;
               await pending.get(id)!.promise;
               return `v${id}`;
             });
             return createLoadingBoundary(
               () => value(),
-              () => `l${item()}`
+              () => `l${item}`
             );
           },
           { keyed: true }

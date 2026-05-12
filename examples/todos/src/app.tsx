@@ -83,7 +83,7 @@ function MainSection(props: { filter: Filter }) {
         />
         <label for="toggle-all">Mark all as complete</label>
         <ul class="todo-list">
-          <For each={filtered()}>{todo => <TodoItem todo={todo()} />}</For>
+          <For each={filtered()}>{todo => <TodoItem todo={todo} />}</For>
         </ul>
       </section>
     </Show>

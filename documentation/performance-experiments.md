@@ -6353,3 +6353,373 @@ The branch placement matters more than the keyword-vs-helper split: putting the 
 
 **Tests.** All `118` `babel-plugin-jsx-dom-expressions` fixtures pass (6 SSR fixtures regenerated for the new emission). All `176` `dom-expressions` SSR runtime tests, `81` `solid-web` server tests, `13` `solid-web` hydration tests, and `405` `solid-js` tests pass.
 
+### Investigation 18: Mode-specific control-flow callback shapes (2026-05-12)
+
+This revisits the older raw-row diagnostic as an actual API/runtime shape instead of a bundle patch:
+
+- Default / keyed-by-reference `mapArray` and `<For>` pass a raw row value.
+- `keyed: false` passes a row accessor and a raw index.
+- A custom key function passes a row accessor and index accessor.
+- `<Show>` / `<Match>` follow the same "raw when callback owns the value, accessor when the value can change in-place" rule.
+
+Reasoning: the default keyed row is not reactive inside the row callback. Requiring `row().id` reads like reactive work but is only an accessor closure call around a stable per-row value. The migration surface is also smaller than the original 2.0 shape because it moves the common keyed forms closer to 1.x.
+
+Tier-2 DOM (`js-framework-benchmark`, focused CPU suite, `--count 5`, total medians):
+
+| bench | vanilla | solid 1.9.12 | solid-next |
+|-------|--------:|-------------:|-----------:|
+| `01_run1k` | 32.6 | 33.1 | 34.3 |
+| `02_replace1k` | 34.8 | 37.2 | 37.3 |
+| `03_update10th1k_x16` | 19.3 | 18.7 | 20.5 |
+| `05_swap1k` | 20.9 | 23.3 | 24.6 |
+| `07_create10k` | 330.3 | 353.1 | 356.6 |
+| `08_create1k-after1k_x2` | 37.7 | 39.4 | 39.0 |
+| `09_clear1k_x8` | 15.9 | 19.9 | 17.0 |
+
+Reading:
+
+- The client DOM shape is broadly close to Solid 1 and better than the previous accessor-heavy application shape, especially where row creation/clear paths were paying for extra accessor closures/calls.
+- This is enough to validate the semantic direction, but it is not a universal Tier-2 win: some rows remain slightly behind Solid 1 and vanilla still defines the lower bound on script work.
+
+Tier-2 SSR (`isomorphic-ui-benchmarks`, ops/sec):
+
+| bench | react | inferno | solid 1.x | solid-next |
+|-------|------:|--------:|----------:|-----------:|
+| `search-results` | 3,480 | 5,417 | 28,874 | 14,159 |
+| `color-picker` | 18,402 | 37,006 | 57,963 | 38,968 |
+
+Reading:
+
+- No meaningful SSR movement from the raw-row/control-flow callback change.
+- This did **not** provide the hoped-for final SSR push. The Solid 1.x gap already existed before this experiment and remains basically unchanged.
+- The likely explanation is that SSR's hot cost is no longer the per-row accessor shape. The previous investigations already recovered the large allocator/runtime costs; the remaining gap is more likely in generated SSR expression structure and server string-resolution work.
+
+Tier-2 reconcile (`solid-uibench`, median sample time, lower better). Correct gold standard is Solid `0.14.0`, not Solid 1.9:
+
+| mode | group | solid-next | solid 0.14 |
+|------|-------|-----------:|-----------:|
+| sCU on | overall | 0.3 | 0.2 |
+| sCU on | table | 0.3 | 0.2 |
+| sCU on | anim | 0.2 | 0.2 |
+| sCU on | tree | 0.5 | 0.3 |
+| sCU off | overall | 0.4 | 0.3 |
+| sCU off | table | 0.3 | 0.2 |
+| sCU off | anim | 0.3 | 0.2 |
+| sCU off | tree | 0.6 | 0.4 |
+
+Reading:
+
+- Against the real UIBench northstar, Solid 2 is still behind in both sCU modes.
+- The mode-specific callback shape is still a semantic win: callback types now describe ownership/reactivity instead of papering over it with accessors everywhere.
+- It should not be messaged as an SSR optimization. The docs/migration story should frame it as "callback shape follows whether the value can change inside the same callback instance," with client hot-path cleanup as supporting evidence.
+
+Remaining SSR guesses after this miss:
+
+- **Compiler-emitted dynamic closures.** `search-results` previously showed large self-time in `_v$N` dynamic closures. Grouping helped, but Solid 1.x's SSR output still does more eager argument computation and less function-hole replay work.
+- **`tryResolveString` / `ssr()` dispatch.** The hot path still walks generalized string/object/function/array/template shapes that preserve async semantics. Solid 1.x has less general machinery.
+- **Hydration-id formatting and owner/context bookkeeping.** Most large wins have already landed (lean owners, owner pooling, mapArray row-owner elision), but residual `formatChildId`, memo pull, and row callback scaffolding remain.
+- **Template escaping / array escaping shape.** `escape()` was improved, but array/template result escaping still does conservative passes that Solid 1.x may avoid through simpler output.
+
+Net: keep the callback-shape change for API truth and client performance, but treat SSR as a separate remaining compiler/runtime problem. The next SSR work should probably start from a fresh profile comparing Solid 1.x vs `solid-next` generated output for `search-results`, because that benchmark still shows the largest structural gap.
+
+### Investigation 19: Current SSR CPU profiles after callback-shape change (2026-05-12)
+
+Ran direct `node:inspector` CPU profiles around the current built `solid-next` server render functions, bypassing Benchmark.js and profiling only steady-state render loops after warmup:
+
+- `color-picker`: 50k renders
+- `search-results`: 30k renders
+
+Also profiled the Solid 1.x server bundles with the same driver for shape comparison.
+
+During setup found a benchmark typo in `benchmarks/search-results/solid-next/server.jsx`:
+
+```js
+return renderToString(() => <App searchResultsData={res} />), { noScript: true };
+```
+
+This executed `renderToString` but returned the options object via comma operator. Fixed to pass options as the second argument. The competitive rerun stayed basically unchanged:
+
+| bench (ops/sec) | react | inferno | solid 1.x | solid-next |
+|-----------------|------:|--------:|----------:|-----------:|
+| `search-results` | 3,419 | 5,268 | 29,360 | 14,516 |
+| `color-picker` | 18,184 | 35,447 | 57,690 | 39,034 |
+
+Direct-profile throughput:
+
+| bench | solid-next profile loop | solid 1.x profile loop |
+|-------|------------------------:|-----------------------:|
+| `color-picker` | 38,778 ops/sec | 56,462 ops/sec |
+| `search-results` | 14,209 ops/sec | 28,211 ops/sec |
+
+Top self-time frames, `solid-next`:
+
+| bench | frame | self % |
+|-------|-------|-------:|
+| `color-picker` | `createMemo.sync` | 29.8 |
+| `color-picker` | row `children` callback | 16.0 |
+| `color-picker` | `ssr` | 10.2 |
+| `color-picker` | `_v$4` dynamic closure | 8.7 |
+| `color-picker` | `tryResolveString` | 7.8 |
+| `color-picker` | `pull` | 7.0 |
+| `color-picker` | GC | 6.7 |
+| `color-picker` | `formatChildId` | 5.0 |
+| `search-results` | `escape` | 34.9 |
+| `search-results` | `ssr` | 15.1 |
+| `search-results` | GC | 10.2 |
+| `search-results` | `Item` | 8.6 |
+| `search-results` | `createMemo.sync` | 6.6 |
+| `search-results` | `createOwner` | 3.9 |
+| `search-results` | `tryResolveString` | 2.6 |
+| `search-results` | `pull` | 2.3 |
+
+Top self-time frames, Solid 1.x:
+
+| bench | frame | self % |
+|-------|-------|-------:|
+| `color-picker` | `escape` | 29.3 |
+| `color-picker` | `simpleMap` | 21.3 |
+| `color-picker` | `For` | 19.6 |
+| `color-picker` | row `children` callback | 7.5 |
+| `color-picker` | `App` | 6.4 |
+| `color-picker` | GC | 4.5 |
+| `search-results` | `escape` | 27.0 |
+| `search-results` | `Item` | 22.8 |
+| `search-results` | `createComponent` | 19.0 |
+| `search-results` | `simpleMap` | 6.3 |
+| `search-results` | GC | 4.0 |
+| `search-results` | `Index` | 3.5 |
+
+Read:
+
+- `color-picker` is now very clearly dominated by Solid 2's sync memo/control-flow machinery, not the raw row accessor shape. The row callback still costs more than 1.x (`16%` vs `7.5%`), but the bigger structural difference is `createMemo.sync`/`pull`/`tryResolveString`/`ssr` sitting on top of the simple row map. Solid 1 spends most of its time in direct `escape` + `simpleMap`/`For`.
+- `search-results` remains an output-shape/string path problem. `escape` + `ssr` alone are ~50% self time in Solid 2. Solid 1 also spends a lot in `escape`, but the surrounding render path is much simpler (`Item` + `createComponent` + `simpleMap`).
+- GC is not dominant (`~7-10%` in Solid 2; lower in Solid 1), so the next wins are CPU/code-shape wins.
+- The previous guesses were directionally right, but the priority order should be updated:
+  1. Reduce server `createMemo.sync`/`pull` overhead for purely synchronous control-flow bodies.
+  2. Reduce `ssr()` / `tryResolveString` dispatch for common already-string / template-object paths.
+  3. Investigate why `escape` is still such a large part of `search-results` after the single-pass fast scan.
+  4. Reduce `formatChildId` / owner-id work if it can be made prefix-cached without hurting hydration parity.
+
+Raw profile artifacts were written under `../isomorphic-ui-benchmarks/profiles/`:
+
+- `color-picker-solid-next-fixed.cpuprofile`
+- `search-results-solid-next-fixed.cpuprofile`
+- `color-picker-solid1-current.cpuprofile`
+- `search-results-solid1-current.cpuprofile`
+
+### Investigation 20: SSR `color-picker` gap-closing ladder (2026-05-12)
+
+Goal: keep stacking unsafe/generated-bundle diagnostics until `solid-next/color-picker` reaches Solid 1.x, then read the remaining structural gap. This is **not** an implementation plan; several steps intentionally violate async/hydration invariants.
+
+Baseline in direct render loops (`100k` renders, same output length `8948` chars/render):
+
+| state | ops/sec |
+|-------|--------:|
+| Solid 1.x | ~58-70k |
+| Solid 2 current | ~38-39k |
+
+#### Step 1: Direct `mapArray` pull (source probe)
+
+Changed SSR `mapArray` to skip the generic `createMemo({ sync: true })` wrapper and use its own memo owner + direct `read()` function.
+
+Competitive `isomorphic-ui-benchmarks` after rebuilding from source:
+
+| bench | solid 1.x | solid-next |
+|-------|----------:|-----------:|
+| `search-results` | 28,514 | 14,180 |
+| `color-picker` | 58,868 | 39,703 |
+
+Read:
+
+- Basically flat on real numbers (`color-picker` only `~+1-2%`, within noise).
+- Profile bucket changed from `createMemo.sync` to `read`; the cost is inside the loop/body, not the generic sync memo wrapper.
+
+#### Step 2: Eager row class expression (generated-bundle diagnostic, unsafe)
+
+Changed:
+
+```js
+var _v$4 = () => ssrClassName("color" + (selectedColorIndex() === i() ? " selected" : ""));
+```
+
+to eager:
+
+```js
+var _v$4 = ssrClassName("color" + (selectedColorIndex() === i() ? " selected" : ""));
+```
+
+Direct loop:
+
+| state | ops/sec |
+|-------|--------:|
+| Solid 2 + eager class | ~46-49k |
+| Solid 1.x | ~58-59k |
+
+Read:
+
+- This removes a visible function-hole / `tryResolveString` tax.
+- Not safe generally: `selectedColorIndex()` / `i()` can suspend or depend on owner context; eager evaluation moves `NotReadyError` outside the normal function-hole capture/retry path.
+
+#### Step 3: Bypass outer `escape(For(...))` array resolution (generated-bundle diagnostic, unsafe)
+
+`color-picker` compiles the list as:
+
+```js
+escape(For({ each: colors, children: ... }))
+```
+
+Diagnostic replaced that with a direct join of the `For` accessor result's SSR node array:
+
+```js
+joinSSRNodes(For({ each: colors, children: ... })())
+```
+
+where `joinSSRNodes` does:
+
+```js
+let out = "";
+for (...) out += nodes[i].t;
+```
+
+Direct loop:
+
+| state | ops/sec |
+|-------|--------:|
+| Solid 2 + eager class + join For | ~52-54k |
+| Solid 1.x | ~65-70k |
+
+Read:
+
+- The outer array escape/resolution path is another large chunk.
+- Unsafe as written: it assumes every row is a plain sync SSR object with a `.t` string and no async holes, markers, adjacent primitive separators, or nested template arrays.
+
+#### Step 4: Skip per-row hydration id formatting (generated-bundle diagnostic, unsafe)
+
+Disabled the per-row:
+
+```js
+owner.id = formatChildId(origId, origChildCount + i);
+```
+
+Direct loop:
+
+| state | ops/sec |
+|-------|--------:|
+| Solid 2 + eager class + join For + no row id | ~59-60k |
+| Solid 1.x | ~58-59k |
+
+Read:
+
+- This closes `color-picker` in the direct-loop ladder.
+- Unsafe to keep: hydration id parity depends on synthesizing the same per-row owner prefix the client gets from real row owners.
+
+#### Conclusion
+
+For `color-picker`, the remaining 1.x gap is explainable by three buckets:
+
+1. **Function-hole generality** for dynamic row attributes.
+2. **Outer array/template resolution** for `For` output.
+3. **Per-row hydration id formatting**.
+
+The direct `mapArray` memo-wrapper shortcut is not the main lever. The real work would be finding safe versions of the three unsafe diagnostics:
+
+- a sync-only / no-suspend contract for some generated dynamic expressions, or a cheaper lazy function-hole path;
+- a safe fast path for arrays of plain SSR template objects that preserves async holes and separator semantics;
+- a row id prefix/cache strategy that preserves hydration parity while avoiding repeated `formatChildId`.
+
+### Investigation 21: Safe plain SSR array fast path (2026-05-12)
+
+Follow-up to Investigation 20, Step 3. Instead of the unsafe generated-bundle `joinSSRNodes(For(...)())` diagnostic, added a narrow runtime fast path in `dom-expressions` SSR:
+
+- `escape(array)` first tries to join the array if every entry is a plain sync SSR object: non-null object, no `h`, and `typeof t === "string"`.
+- `tryResolveString(array)` uses the same helper before walking the general recursive resolver.
+- Any primitive, async template (`h`), nested template array, function, null, or unusual object shape falls back to the existing resolver, preserving async holes and separator semantics.
+
+Validation:
+
+- `pnpm --filter dom-expressions test`: 21 suites / 440 tests passed.
+- `pnpm exec vitest run test/server/flow.spec.ts`: 27 tests passed.
+
+Competitive `isomorphic-ui-benchmarks` after rebuilding `solid-next` with the patched runtime:
+
+| run | bench | react | inferno | solid 1.x | solid-next |
+|-----|-------|------:|--------:|----------:|-----------:|
+| 1 | `search-results` | 3,534 | 5,419 | 28,532 | 13,774 |
+| 1 | `color-picker` | 17,397 | 35,344 | 57,015 | 40,535 |
+| 2 | `search-results` | 3,495 | 5,122 | 23,195 | 14,100 |
+| 2 | `color-picker` | 17,520 | 37,347 | 59,133 | 40,583 |
+
+Read:
+
+- This is safe and does hit the generated `escape(For(...))` shape in both benchmark bundles.
+- `color-picker` improves modestly versus the prior observed `solid-next` result (`~38,968 ops/sec -> ~40,5xx`, roughly `+4%`).
+- `search-results` is effectively flat/noisy versus the prior observed result (`~14,159 ops/sec`).
+- The large Step 3 diagnostic win did not transfer to the conservative runtime helper. The remaining gap is still mostly in function-hole success cost and row/runtime work around the generated children, not just the recursive array resolver itself.
+
+### Investigation 22: Sync primitive function-hole fast path (2026-05-12)
+
+Follow-up to Investigation 20, Step 2. The unsafe eager-class diagnostic showed a large `color-picker` win by removing the generated function hole:
+
+```js
+() => ssrClassName("color" + (selectedColorIndex() === i() ? " selected" : ""))
+```
+
+This probe keeps the function hole and async semantics, but adds a narrower success path in `ssr()`:
+
+- When a non-group hole is a function and the accumulated result is still a plain string, call it through `tryResolveFunctionHole`.
+- If it returns `string`, `number`, `null`, `undefined`, or `boolean`, handle that directly.
+- If it throws `NotReadyError`, preserve the existing `buildAsyncWrap(err, hole)` owner-captured retry path.
+- If it returns an object, array, template, or another function, fall back to `tryResolveString(value)`.
+
+This was measured together with Investigation 21's plain-array fast path, because that is the current best safe runtime state.
+
+Validation:
+
+- `dom-expressions` server Jest project: 4 suites / 178 tests passed.
+- `vitest run test/server/flow.spec.ts test/server/ssr-async.spec.ts`: 136 tests passed.
+- Note: after updating pnpm, package-script invocations hit pnpm's build-approval/dependency-status guard before Jest. Direct package-root Jest was used for `dom-expressions`; the failing pnpm wrapper was not a runtime/test failure.
+
+Competitive `isomorphic-ui-benchmarks` after rebuilding `solid-next` with both safe runtime fast paths:
+
+| run | bench | react | inferno | solid 1.x | solid-next |
+|-----|-------|------:|--------:|----------:|-----------:|
+| 1 | `search-results` | 3,478 | 5,415 | 29,806 | 14,582 |
+| 1 | `color-picker` | 17,969 | 37,558 | 56,740 | 42,562 |
+| 2 | `search-results` | 3,509 | 5,318 | 28,653 | 14,136 |
+| 2 | `color-picker` | 18,055 | 36,610 | 57,923 | 43,103 |
+
+Read:
+
+- `color-picker` gets a real, repeatable lift: prior current result was `~38,968 ops/sec`, array-only was `~40,5xx`, and array + function-hole fast path is `~42.6-43.1k`.
+- `search-results` remains effectively flat/noisy. One run reached `14.6k`, the repeat was `14.1k`, matching prior range.
+- This confirms the function-hole success path is a meaningful part of the `color-picker` gap, but still not enough to approach Solid 1.x (`~57-58k` in these runs).
+- The remaining `color-picker` gap is likely split between unavoidable closure invocation/owner-row work and hydration id formatting. The unsafe eager-class diagnostic still did more because it removed the closure entirely, not just the recursive resolver after the closure returns.
+
+### Investigation 23: Local row hydration id formatting cache (2026-05-12)
+
+Follow-up to Investigation 20, Step 4. The lazy owner-id materialization probe was a clear regression because it changed every `owner.id` read into an accessor. This probe kept eager `owner.id` semantics and only changed the `mapArray` / `repeat` row loops:
+
+- Precompute the row id's base36 length marker for the current `origChildCount`.
+- Increment a local `rowId` counter through the loop.
+- Only recompute the marker when crossing `36`, `36^2`, `36^3`, etc.
+- Continue assigning `parent.id` eagerly before each row and restoring `parent.id` / `_childCount` in `finally`.
+
+Validation:
+
+- `vitest run test/server/flow.spec.ts test/server/signals.spec.ts test/server/ssr-async.spec.ts`: 183 tests passed.
+
+Competitive `isomorphic-ui-benchmarks` after rebuilding `solid-next` with the row-id cache plus the two prior safe `dom-expressions` fast paths:
+
+| run | bench | react | inferno | solid 1.x | solid-next |
+|-----|-------|------:|--------:|----------:|-----------:|
+| 1 | `search-results` | 3,526 | 5,346 | 29,357 | 14,802 |
+| 1 | `color-picker` | 18,067 | 37,362 | 58,531 | 41,564 |
+| 2 | `search-results` | 3,519 | 5,256 | 27,917 | 14,237 |
+| 2 | `color-picker` | 17,897 | 37,134 | 58,077 | 42,042 |
+
+Read:
+
+- This shape is not a win. `search-results` remains noise, and `color-picker` regresses versus the prior safe runtime state (`~42.6-43.1k` without this cache).
+- The extra branch/counter/marker state in the hot loop appears to cost more than the saved generic `formatChildId` work.
+- Reverted the source probe. The safe runtime baseline remains Investigation 21 + 22, without this id-cache change.
+

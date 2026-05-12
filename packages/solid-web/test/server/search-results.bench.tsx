@@ -69,12 +69,7 @@ function App() {
   return (
     <div class="search-results">
       <div>
-        <For each={ITEMS}>
-          {item => {
-            const i = item();
-            return <Item item={i} />;
-          }}
-        </For>
+        <For each={ITEMS}>{item => <Item item={item} />}</For>
       </div>
     </div>
   );

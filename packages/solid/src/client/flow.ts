@@ -9,10 +9,20 @@ type NonZeroParams<T extends (...args: any[]) => any> = Parameters<T>["length"] 
   ? never
   : T;
 type ConditionalRenderCallback<T> = (item: Accessor<NonNullable<T>>) => SolidElement;
+type KeyedConditionalRenderCallback<T> = (item: NonNullable<T>) => SolidElement;
 type ConditionalRenderChildren<
   T,
   F extends ConditionalRenderCallback<T> = ConditionalRenderCallback<T>
 > = SolidElement | NonZeroParams<F>;
+type KeyedConditionalRenderChildren<
+  T,
+  F extends KeyedConditionalRenderCallback<T> = KeyedConditionalRenderCallback<T>
+> = SolidElement | NonZeroParams<F>;
+type ForOptions<T> = {
+  keyed?: boolean | ((item: T) => any);
+  fallback?: Accessor<SolidElement>;
+  name?: string;
+};
 
 const narrowedError = (name: string) =>
   IS_DEV
@@ -22,14 +32,13 @@ const narrowedError = (name: string) =>
 /**
  * Creates a list of elements from a list.
  *
- * Receives a map function as its child that takes list element and index
- * accessors and returns a JSX element; if the list is empty, an optional
- * `fallback` is rendered instead.
+ * Receives a map function as its child and returns a JSX element for each
+ * list item; if the list is empty, an optional `fallback` is rendered instead.
  *
  * @example
  * ```tsx
  * <For each={items} fallback={<div>No items</div>}>
- *   {(item, index) => <div data-index={index()}>{item()}</div>}
+ *   {(item, index) => <div data-index={index()}>{item.label}</div>}
  * </For>
  * ```
  *
@@ -38,15 +47,37 @@ const narrowedError = (name: string) =>
 export function For<T extends readonly any[], U extends SolidElement>(props: {
   each: T | undefined | null | false;
   fallback?: SolidElement;
-  keyed?: boolean | ((item: T[number]) => any);
+  keyed?: true;
+  children: (item: T[number], index: Accessor<number>) => U;
+}): SolidElement;
+export function For<T extends readonly any[], U extends SolidElement>(props: {
+  each: T | undefined | null | false;
+  fallback?: SolidElement;
+  keyed: false;
+  children: (item: Accessor<T[number]>, index: number) => U;
+}): SolidElement;
+export function For<T extends readonly any[], U extends SolidElement>(props: {
+  each: T | undefined | null | false;
+  fallback?: SolidElement;
+  keyed: (item: T[number]) => any;
   children: (item: Accessor<T[number]>, index: Accessor<number>) => U;
-}) {
-  const options: Parameters<typeof mapArray>[2] =
+}): SolidElement;
+export function For<T extends readonly any[], U extends SolidElement>(props: {
+  each: T | undefined | null | false;
+  fallback?: SolidElement;
+  keyed?: boolean | ((item: T[number]) => any);
+  children: (item: any, index: any) => U;
+}): SolidElement {
+  const options: ForOptions<T[number]> =
     "fallback" in props
       ? { keyed: props.keyed, fallback: () => props.fallback }
       : { keyed: props.keyed };
-  if (IS_DEV) options!.name = "<For>";
-  return mapArray(() => props.each, props.children, options) as unknown as SolidElement;
+  if (IS_DEV) options.name = "<For>";
+  return mapArray(
+    () => props.each,
+    props.children as any,
+    options as any
+  ) as unknown as SolidElement;
 }
 
 /**
@@ -88,10 +119,10 @@ export function Repeat<T extends SolidElement>(props: {
  * Conditionally renders its children when `when` is truthy, otherwise renders
  * the optional `fallback`.
  *
- * The function-child form receives an accessor for the narrowed value — call
- * it to read. Without `keyed` (default), the child is preserved across
- * truthy values; with `keyed`, the child remounts whenever the value's
- * identity changes.
+ * The function-child form receives a narrowed value. Without `keyed`
+ * (default), it receives an accessor and the child is preserved across truthy
+ * values; with `keyed`, it receives the raw value and remounts whenever the
+ * value's identity changes.
  *
  * @example
  * ```tsx
@@ -102,11 +133,35 @@ export function Repeat<T extends SolidElement>(props: {
  *
  * @description https://docs.solidjs.com/reference/components/show
  */
+export function Show<T>(props: {
+  when: T | undefined | null | false;
+  keyed: true;
+  fallback?: SolidElement;
+  children: SolidElement;
+}): SolidElement;
+export function Show<T, F extends KeyedConditionalRenderCallback<T>>(props: {
+  when: T | undefined | null | false;
+  keyed: true;
+  fallback?: SolidElement;
+  children: NonZeroParams<F>;
+}): SolidElement;
+export function Show<T>(props: {
+  when: T | undefined | null | false;
+  keyed?: false;
+  fallback?: SolidElement;
+  children: SolidElement;
+}): SolidElement;
 export function Show<T, F extends ConditionalRenderCallback<T>>(props: {
+  when: T | undefined | null | false;
+  keyed?: false;
+  fallback?: SolidElement;
+  children: NonZeroParams<F>;
+}): SolidElement;
+export function Show<T>(props: {
   when: T | undefined | null | false;
   keyed?: boolean;
   fallback?: SolidElement;
-  children: ConditionalRenderChildren<T, F>;
+  children: SolidElement | ((item: any) => SolidElement);
 }): SolidElement {
   const keyed = props.keyed;
   // `props.when` is user input — may be a pending async read. Keep this memo
@@ -139,14 +194,16 @@ export function Show<T, F extends ConditionalRenderCallback<T>>(props: {
         const child = props.children;
         const fn = typeof child === "function" && child.length > 0;
         return fn
-          ? untrack(
-              () =>
-                (child as any)(() => {
-                  if (!untrack(condition)) throw narrowedError("Show");
-                  return conditionValue();
-                }),
-              IS_DEV && "<Show>"
-            )
+          ? keyed
+            ? untrack(() => (child as any)(conditionValue()), IS_DEV && "<Show>")
+            : untrack(
+                () =>
+                  (child as any)(() => {
+                    if (!untrack(condition)) throw narrowedError("Show");
+                    return conditionValue();
+                  }),
+                IS_DEV && "<Show>"
+              )
           : child;
       }
       return props.fallback;
@@ -155,7 +212,7 @@ export function Show<T, F extends ConditionalRenderCallback<T>>(props: {
   ) as unknown as SolidElement;
 }
 
-type EvalConditions = readonly [number, Accessor<unknown>, MatchProps<unknown>];
+type EvalConditions = readonly [number, Accessor<unknown>, AnyMatchProps<unknown>];
 
 /**
  * Switches between content based on mutually exclusive conditions. Renders
@@ -182,7 +239,7 @@ export function Switch(props: { fallback?: SolidElement; children: SolidElement 
   // function. Synchronous by construction.
   const switchFunc = createMemo<Accessor<EvalConditions | undefined>>(
     () => {
-      const mps = chs.toArray() as unknown as MatchProps<unknown>[];
+      const mps = chs.toArray() as unknown as AnyMatchProps<unknown>[];
       let func: Accessor<EvalConditions | undefined> = () => undefined;
       for (let i = 0; i < mps.length; i++) {
         const index = i;
@@ -220,14 +277,16 @@ export function Switch(props: { fallback?: SolidElement; children: SolidElement 
       const child = mp.children;
       const fn = typeof child === "function" && child.length > 0;
       return fn
-        ? untrack(
-            () =>
-              (child as any)(() => {
-                if (untrack(switchFunc)()?.[0] !== index) throw narrowedError("Match");
-                return conditionValue();
-              }),
-            IS_DEV && "<Match>"
-          )
+        ? mp.keyed
+          ? untrack(() => (child as any)(conditionValue()), IS_DEV && "<Match>")
+          : untrack(
+              () =>
+                (child as any)(() => {
+                  if (untrack(switchFunc)()?.[0] !== index) throw narrowedError("Match");
+                  return conditionValue();
+                }),
+              IS_DEV && "<Match>"
+            )
         : child;
     },
     IS_DEV ? { name: "eval conditions", sync: true } : { sync: true }
@@ -236,15 +295,32 @@ export function Switch(props: { fallback?: SolidElement; children: SolidElement 
 
 export type MatchProps<T, F extends ConditionalRenderCallback<T> = ConditionalRenderCallback<T>> = {
   when: T | undefined | null | false;
-  keyed?: boolean;
+  keyed?: false;
   children: ConditionalRenderChildren<T, F>;
 };
+export type KeyedMatchProps<
+  T,
+  F extends KeyedConditionalRenderCallback<T> = KeyedConditionalRenderCallback<T>
+> = {
+  when: T | undefined | null | false;
+  keyed: true;
+  children: KeyedConditionalRenderChildren<T, F>;
+};
+export type AnyMatchProps<T> =
+  | MatchProps<T>
+  | KeyedMatchProps<T>
+  | {
+      when: T | undefined | null | false;
+      keyed?: boolean;
+      children: SolidElement;
+    };
 /**
  * A branch inside a `<Switch>`. The first `<Match>` whose `when` is truthy
  * wins; remaining matches are skipped.
  *
- * Like `<Show>`, `<Match>` supports a function child that receives an
- * accessor for the narrowed value.
+ * Like `<Show>`, `<Match>` supports a function child. Non-keyed children
+ * receive an accessor for the narrowed value; keyed children receive the raw
+ * narrowed value.
  *
  * @example
  * ```tsx
@@ -260,7 +336,24 @@ export type MatchProps<T, F extends ConditionalRenderCallback<T> = ConditionalRe
  *
  * @description https://docs.solidjs.com/reference/components/switch-and-match
  */
-export function Match<T, F extends ConditionalRenderCallback<T>>(props: MatchProps<T, F>) {
+export function Match<T>(props: {
+  when: T | undefined | null | false;
+  keyed: true;
+  children: SolidElement;
+}): SolidElement;
+export function Match<T, F extends KeyedConditionalRenderCallback<T>>(
+  props: KeyedMatchProps<T, F>
+): SolidElement;
+export function Match<T>(props: {
+  when: T | undefined | null | false;
+  keyed?: false;
+  children: SolidElement;
+}): SolidElement;
+export function Match<T, F extends ConditionalRenderCallback<T>>(
+  props: MatchProps<T, F>
+): SolidElement;
+export function Match<T>(props: AnyMatchProps<T>): SolidElement;
+export function Match<T>(props: AnyMatchProps<T>) {
   return props as unknown as SolidElement;
 }
 

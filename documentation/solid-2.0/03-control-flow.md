@@ -4,7 +4,7 @@
 
 ## Summary
 
-Solid 2.0 simplifies and unifies control-flow APIs by consolidating list rendering into a single `For` signature (covering the old `For`/`Index` split), introducing `Repeat` for range/count-based rendering, renaming/reshaping async and error boundaries as `Loading` and `Errored`, and reshaping `createDynamic` into a `lazy`-style `dynamic` factory that returns a stable `Component`. The goal is fewer “nearly-the-same” APIs, more explicit keying semantics, and control-flow callbacks that are consistent with the 2.0 reactivity model.
+Solid 2.0 simplifies and unifies control-flow APIs by consolidating list rendering into a single `For` signature (covering the old `For`/`Index` split), introducing `Repeat` for range/count-based rendering, renaming/reshaping async and error boundaries as `Loading` and `Errored`, and reshaping `createDynamic` into a `lazy`-style `dynamic` factory that returns a stable `Component`. The goal is fewer “nearly-the-same” APIs, more explicit keying semantics, and control-flow callbacks that expose reactive accessors only where the callback argument can actually change.
 
 ## Motivation
 
@@ -17,17 +17,21 @@ Solid 2.0 simplifies and unifies control-flow APIs by consolidating list renderi
 
 ### List rendering: `For` (keyed, non-keyed, custom key)
 
-`For` takes `each`, optional `fallback`, optional `keyed`, and a children mapping function that receives **accessors** for both the item and the index.
+`For` takes `each`, optional `fallback`, optional `keyed`, and a children mapping function whose arguments depend on the keying mode:
+
+- Default / `keyed={true}`: `(item, index)` where `item` is the raw row value and `index` is an accessor, because keyed rows can move.
+- `keyed={false}`: `(item, index)` where `item` is an accessor and `index` is a plain number, matching the old `Index` stability model.
+- `keyed={(item) => key}`: `(item, index)` where both arguments are accessors, because the row can be preserved while either argument changes.
 
 ```jsx
 // Default keyed behavior (identity)
 <For each={todos()}>
-  {(todo, i) => <TodoRow todo={todo()} index={i()} />}
+  {(todo, i) => <TodoRow todo={todo} index={i()} />}
 </For>
 
 // Index-style behavior (reuse by index)
 <For each={todos()} keyed={false}>
-  {(todo, i) => <TodoRow todo={todo()} index={i()} />}
+  {(todo, i) => <TodoRow todo={todo()} index={i} />}
 </For>
 
 // Custom key
@@ -45,6 +49,7 @@ Notes:
 
 - `keyed={false}` is the direct replacement for `Index`.
 - `keyed={(item) => key}` is the escape hatch for stable keys without having to pre-normalize lists.
+- Avoid dynamic boolean `keyed` values with function children. The callback shape is mode-specific, so prefer a literal `true`, literal `false`, or a custom key function.
 
 ### Range/count rendering: `Repeat`
 
@@ -76,7 +81,7 @@ This is primarily intended for use with **stores**, where the data at each index
 
 ### Conditionals: `Show`
 
-`Show` supports element children or function children. Function children receive a narrowed accessor.
+`Show` supports element children or function children. Non-keyed function children receive a narrowed accessor. Keyed function children receive the raw narrowed value, matching Solid 1.x keyed behavior.
 
 ```jsx
 <Show when={user()} fallback={<Login />}>
@@ -85,13 +90,13 @@ This is primarily intended for use with **stores**, where the data at each index
 
 // Keyed form (treats value identity as the switching condition)
 <Show when={user()} keyed>
-  {(u) => <Profile user={u()} />}
+  {(u) => <Profile user={u} />}
 </Show>
 ```
 
 ### Branching: `Switch` / `Match`
 
-`Switch` picks the first matching `Match`. `Match` supports element or function children.
+`Switch` picks the first matching `Match`. `Match` supports element or function children. Like `Show`, keyed function children receive the raw narrowed value and non-keyed function children receive an accessor.
 
 ```jsx
 <Switch fallback={<NotFound />}>
@@ -280,7 +285,7 @@ Here the outer sequential order ensures `Header` reveals first; until it does, t
 
 // 2.0
 <For each={items()} keyed={false}>
-  {(item, i) => <Row item={item()} index={i()} />}
+  {(item, i) => <Row item={item()} index={i} />}
 </For>
 ```
 

@@ -45,10 +45,10 @@ const dispose = createRoot(d => {
     container,
     () => (
       <For each={rows()}>
-        {row => (
-          <div class={row().id % 10 === 0 ? "highlighted" : ""}>
-            <span>{row().id}</span>
-            <span>{row().label}</span>
+        {({ id, label }) => (
+          <div class={id % 10 === 0 ? "highlighted" : ""}>
+            <span>{id}</span>
+            <span>{label}</span>
           </div>
         )}
       </For>

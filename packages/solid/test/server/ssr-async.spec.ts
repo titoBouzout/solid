@@ -678,8 +678,8 @@ describe("Loading SSR Async", () => {
             get children() {
               const list = For({
                 each: [1, 2, 3] as const,
-                children: (item: () => number) => {
-                  const data = createMemo(() => d.promise.then((v: string) => `${v}-${item()}`));
+                children: (item: number) => {
+                  const data = createMemo(() => d.promise.then((v: string) => `${v}-${item}`));
                   return ssr(["<li>", "</li>"], () => data()) as any;
                 }
               });
