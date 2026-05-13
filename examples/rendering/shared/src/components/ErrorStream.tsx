@@ -26,7 +26,7 @@ function InnerBoundaryItem(props: { id: string }) {
       <Errored
         fallback={(error, reset) => (
           <div>
-            <div>ItemError: {String(error)}</div>
+            <div>ItemError: {String(error())}</div>
             <button
               onClick={() => {
                 setId("1");
@@ -52,7 +52,7 @@ function OuterBoundaryItem(props: { id: string }) {
     <Errored
       fallback={(error, reset) => (
         <div>
-          <div>ItemError: {String(error)}</div>
+          <div>ItemError: {String(error())}</div>
           <button
             onClick={() => {
               setId("1");

@@ -125,14 +125,14 @@ In 2.0’s async model, async values are part of computations (not a separate `c
 
 ### Error boundary: `Errored`
 
-`Errored` is the error boundary. It supports a static fallback or a callback form that receives the error and a reset function.
+`Errored` is the error boundary. It supports a static fallback or a callback form that receives an error accessor and a reset function.
 
 ```jsx
 <Errored
   fallback={(err, reset) => (
     <div>
       <p>Something went wrong.</p>
-      <pre>{String(err)}</pre>
+      <pre>{String(err())}</pre>
       <button onClick={reset}>Retry</button>
     </div>
   )}

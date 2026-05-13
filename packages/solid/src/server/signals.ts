@@ -1464,7 +1464,7 @@ export { NoHydrateContext };
 
 export function createErrorBoundary<U>(
   fn: () => any,
-  fallback: (error: unknown, reset: () => void) => U
+  fallback: (error: Accessor<unknown>, reset: () => void) => U
 ): () => unknown {
   const ctx = sharedConfig.context;
   const parent = getOwner();
@@ -1478,9 +1478,17 @@ export function createErrorBoundary<U>(
     ctx
       ? runWithOwner(parent!, () => {
           const fallbackOwner = createOwner();
-          return runWithOwner(fallbackOwner, () => fallback(err, () => {}));
+          return runWithOwner(fallbackOwner, () =>
+            fallback(
+              () => err,
+              () => {}
+            )
+          );
         })
-      : fallback(err, () => {});
+      : fallback(
+          () => err,
+          () => {}
+        );
   const serializeError = (err: any) => {
     if (ctx && owner.id && !runWithOwner(owner, () => getContext(NoHydrateContext))) {
       ctx.serialize(owner.id, err);

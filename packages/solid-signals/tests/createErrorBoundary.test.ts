@@ -56,8 +56,8 @@ it("should forward error to another handler", () => {
             throw error;
           },
           e => {
-            expect(e).toBe(error);
-            throw e;
+            expect(e()).toBe(error);
+            throw e();
           }
         );
         createRenderEffect(inner, () => {});
@@ -71,16 +71,19 @@ it("should forward error to another handler", () => {
 
 it("should not duplicate error handler", () => {
   const error = new Error(),
-    handler = vi.fn();
+    handler = vi.fn((_: unknown) => "errored");
 
   let [$x, setX] = createSignal(0),
     shouldThrow = false;
 
   createRoot(() => {
-    const b = createErrorBoundary(() => {
-      $x();
-      if (shouldThrow) throw error;
-    }, handler);
+    const b = createErrorBoundary(
+      () => {
+        $x();
+        if (shouldThrow) throw error;
+      },
+      err => handler(err())
+    );
     createRenderEffect(b, () => {});
   });
 
@@ -95,27 +98,33 @@ it("should not duplicate error handler", () => {
 
 it("should not trigger wrong handler", () => {
   const error = new Error(),
-    rootHandler = vi.fn(),
-    handler = vi.fn();
+    rootHandler = vi.fn((_: unknown) => "errored"),
+    handler = vi.fn((_: unknown) => "errored");
 
   let [$x, setX] = createSignal(0),
     shouldThrow = false;
 
   createRoot(() => {
-    const b = createErrorBoundary(() => {
-      createRenderEffect(
-        () => {
-          $x();
-          if (shouldThrow) throw error;
-        },
-        () => {}
-      );
+    const b = createErrorBoundary(
+      () => {
+        createRenderEffect(
+          () => {
+            $x();
+            if (shouldThrow) throw error;
+          },
+          () => {}
+        );
 
-      const b2 = createErrorBoundary(() => {
-        // no-op
-      }, handler);
-      createRenderEffect(b2, () => {});
-    }, rootHandler);
+        const b2 = createErrorBoundary(
+          () => {
+            // no-op
+          },
+          err => handler(err())
+        );
+        createRenderEffect(b2, () => {});
+      },
+      err => rootHandler(err())
+    );
     createRenderEffect(b, () => {});
   });
 
@@ -131,7 +140,7 @@ it("should not trigger wrong handler", () => {
 it("should throw error if there are no handlers left", () => {
   const error = new Error(),
     handler = vi.fn(e => {
-      throw e;
+      throw e();
     });
 
   createRoot(() => {
@@ -167,11 +176,11 @@ it("should handle errors when the effect is on the outside", async () => {
             throw error;
           },
           e => {
-            expect(e).toBe(error);
+            expect(e()).toBe(error);
           }
         );
       },
-      err => rootHandler(err)
+      err => rootHandler(err())
     );
     createRenderEffect(
       () => b(),
@@ -187,7 +196,7 @@ it("should handle errors when the effect is on the outside", async () => {
 
 it("should handle errors when the effect is on the outside and memo in the middle", async () => {
   const error = new Error(),
-    rootHandler = vi.fn();
+    rootHandler = vi.fn((_: unknown) => "errored");
 
   createRoot(() => {
     const b = createErrorBoundary(
@@ -195,7 +204,7 @@ it("should handle errors when the effect is on the outside and memo in the middl
         createMemo(() => {
           throw error;
         }),
-      rootHandler
+      err => rootHandler(err())
     );
     createRenderEffect(b, () => {});
   });
@@ -300,7 +309,7 @@ it("should catch errors thrown in render effect callbacks (back half)", () => {
         return "content";
       },
       err => {
-        handler(err);
+        handler(err());
         return "errored";
       }
     );
@@ -329,7 +338,7 @@ it("should catch errors thrown in user effect callbacks (back half)", () => {
         return "content";
       },
       err => {
-        handler(err);
+        handler(err());
         return "errored";
       }
     );
@@ -363,7 +372,7 @@ it("should catch errors thrown in user effect callbacks with error handler (back
         return "content";
       },
       err => {
-        handler(err);
+        handler(err());
         return "errored";
       }
     );
@@ -454,7 +463,7 @@ it("should recover when async memo errors then dependency changes and boundary r
         )(),
       (err, reset) => {
         resetFn = reset;
-        return "error: " + (err as Error).message;
+        return "error: " + (err() as Error).message;
       }
     );
 

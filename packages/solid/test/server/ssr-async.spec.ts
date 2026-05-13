@@ -1017,7 +1017,7 @@ describe("Loading SSR Async", () => {
           result = Errored({
             fallback: (e: any) => {
               fallbackCalls++;
-              return `OuterError: ${String(e.message || e)}`;
+              return `OuterError: ${String(e().message || e())}`;
             },
             get children() {
               return Loading({
@@ -1067,7 +1067,7 @@ describe("Loading SSR Async", () => {
           result = Errored({
             fallback: (e: any) => {
               fallbackCalls++;
-              return `OuterError: ${String(e.message || e)}`;
+              return `OuterError: ${String(e().message || e())}`;
             },
             get children() {
               return Loading({
@@ -1115,7 +1115,7 @@ describe("Loading SSR Async", () => {
               const Item = (props: { value: Promise<{ title: string }> }) => {
                 const item = createMemo(() => props.value);
                 return Errored({
-                  fallback: (e: any) => `ItemError: ${String(e.message || e)}`,
+                  fallback: (e: any) => `ItemError: ${String(e().message || e())}`,
                   get children() {
                     return ssr(["<div>", "</div>"], () => item().title) as any;
                   }
@@ -1303,7 +1303,7 @@ describe("Loading SSR Async", () => {
               throw new Error("Boundary test error");
             },
             (err, reset) => {
-              fallbackError = err;
+              fallbackError = err();
               return "fallback rendered";
             }
           );

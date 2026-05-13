@@ -781,7 +781,7 @@ In 1.x, `onError`/`catchError` were imperative error handlers registered in scop
 </ErrorBoundary>
 
 // 2.0
-<Errored fallback={err => <p>{err.message}</p>}>
+<Errored fallback={err => <p>{err().message}</p>}>
   <Child />
 </Errored>
 ```

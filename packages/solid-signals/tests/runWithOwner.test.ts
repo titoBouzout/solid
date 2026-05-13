@@ -35,7 +35,7 @@ it("should handle errors", () => {
       () => {
         owner = getOwner();
       },
-      err => handler(err)
+      err => handler(err())
     );
     b();
 

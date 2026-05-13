@@ -184,7 +184,7 @@ import { createErrorBoundary, createLoadingBoundary } from "@solidjs/signals";
 
 createErrorBoundary(
   () => riskyComputation(),
-  (error, reset) => handleError(error)
+  (error, reset) => handleError(error())
 );
 
 createLoadingBoundary(

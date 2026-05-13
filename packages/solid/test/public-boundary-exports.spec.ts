@@ -44,7 +44,7 @@ test("public createErrorBoundary uses hydration-aware serialized errors", () => 
     () => {
       result = createErrorBoundary(
         () => "children content",
-        (err: any) => `fallback: ${err.message}`
+        (err: any) => `fallback: ${err().message}`
       );
     },
     { id: "t" }

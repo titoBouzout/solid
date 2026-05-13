@@ -237,7 +237,7 @@ export function Match<T>(props: AnyMatchProps<T>) {
  * @description https://docs.solidjs.com/reference/components/error-boundary
  */
 export function Errored(props: {
-  fallback: SolidElement | ((err: any, reset: () => void) => SolidElement);
+  fallback: SolidElement | ((err: () => any, reset: () => void) => SolidElement);
   children: SolidElement;
 }): SolidElement {
   return createErrorBoundary(

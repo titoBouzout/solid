@@ -240,7 +240,7 @@ In 2.0, there's one path: async errors propagate through the reactive graph and 
 
 ```jsx
 // 2.0 — one error path, composable with SSR
-<Errored fallback={err => <p>{err.message}</p>}>
+<Errored fallback={err => <p>{err().message}</p>}>
   <Profile user={user()} />
 </Errored>
 ```

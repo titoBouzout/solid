@@ -396,7 +396,7 @@ describe("Server createErrorBoundary", () => {
       () => {
         const result = createErrorBoundary(
           () => "ok",
-          (err, reset) => `error: ${err}`
+          (err, reset) => `error: ${err()}`
         );
         expect(result()).toBe("ok");
       },
@@ -411,7 +411,7 @@ describe("Server createErrorBoundary", () => {
           () => {
             throw new Error("boom");
           },
-          (err: unknown, reset) => `caught: ${(err as Error).message}`
+          (err: () => unknown, reset) => `caught: ${(err() as Error).message}`
         );
         expect(result()).toBe("caught: boom");
       },

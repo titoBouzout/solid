@@ -133,7 +133,7 @@ export function App() {
     <Errored
       fallback={(err, reset) => (
         <div class="app-error">
-          <p>Something went wrong: {String(err)}</p>
+          <p>Something went wrong: {String(err())}</p>
           <button onClick={reset}>Reset</button>
         </div>
       )}

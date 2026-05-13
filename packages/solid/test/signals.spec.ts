@@ -528,7 +528,7 @@ describe("runWithOwner", () => {
           });
           return "content";
         },
-        (err: any) => `fallback: ${err.message}`
+        (err: any) => `fallback: ${err().message}`
       );
     });
 

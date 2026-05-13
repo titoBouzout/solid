@@ -577,7 +577,7 @@ function hydratedCreateSignal(fn?: any, second?: any) {
 
 function hydratedCreateErrorBoundary<U>(
   fn: () => any,
-  fallback: (error: unknown, reset: () => void) => U
+  fallback: (error: () => unknown, reset: () => void) => U
 ): () => unknown {
   if (!sharedConfig.hydrating) return coreErrorBoundary(fn, fallback);
   markTopLevelSnapshotScope();
@@ -900,8 +900,8 @@ export const createSignal: {
 /**
  * Lower-level primitive that backs the `<Errored>` flow control.
  * Catches errors thrown inside `fn` and renders `fallback(error,
- * reset)` instead. `reset()` recomputes the failing sources so the
- * boundary can attempt to recover.
+ * reset)` instead. `error` is an accessor for the latest captured error;
+ * `reset()` recomputes the failing sources so the boundary can attempt to recover.
  *
  * App code should use `<Errored fallback={...}>` directly — reach for
  * this only when authoring a custom boundary component.
@@ -915,21 +915,24 @@ export const createSignal: {
  * // Custom boundary built on the primitive — adds telemetry around the
  * // canonical `<Errored>` shape.
  * function TracedErrored(props: {
- *   fallback: (e: unknown) => JSX.Element;
+ *   fallback: (e: () => unknown) => JSX.Element;
  *   children: JSX.Element;
  * }): JSX.Element {
  *   return createErrorBoundary(
  *     () => props.children,
  *     (err, reset) => {
- *       reportError(err);
+ *       reportError(err());
  *       return props.fallback(err);
  *     }
  *   ) as unknown as JSX.Element;
  * }
  * ```
  */
-export const createErrorBoundary: typeof coreErrorBoundary = ((...args: any[]) =>
-  (_createErrorBoundary || coreErrorBoundary)(...args)) as typeof coreErrorBoundary;
+export const createErrorBoundary = ((...args: any[]) =>
+  (_createErrorBoundary || coreErrorBoundary)(...args)) as <U>(
+  fn: () => any,
+  fallback: (error: Accessor<unknown>, reset: () => void) => U
+) => () => unknown;
 
 /**
  * Creates an optimistic signal — a `Signal<T>` whose writes are

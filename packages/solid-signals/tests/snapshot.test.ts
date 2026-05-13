@@ -352,7 +352,7 @@ describe("ownedWrite signals excluded from snapshot capture", () => {
         () => {
           throw new Error("test error");
         },
-        (err: any) => `fallback: ${err.message}`
+        (err: any) => `fallback: ${err().message}`
       );
     });
     flush();
@@ -377,7 +377,7 @@ describe("ownedWrite signals excluded from snapshot capture", () => {
         () => "success",
         (err: any, reset) => {
           resetFn = reset;
-          return `fallback: ${err.message}`;
+          return `fallback: ${err().message}`;
         }
       );
     });
@@ -402,7 +402,7 @@ describe("ownedWrite signals excluded from snapshot capture", () => {
 
       result = createErrorBoundary(
         () => "children content",
-        (err: any) => `fallback: ${err.message}`
+        (err: any) => `fallback: ${err().message}`
       );
     });
     flush();

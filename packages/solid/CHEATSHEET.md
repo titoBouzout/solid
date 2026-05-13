@@ -293,7 +293,7 @@ Optimistic writes revert when the transition completes.
 </Loading>
 
 // Error boundary (replaces <ErrorBoundary>)
-<Errored fallback={(err, reset) => <button onClick={reset}>retry</button>}>
+<Errored fallback={(err, reset) => <button onClick={reset}>retry {String(err())}</button>}>
   <Page />
 </Errored>
 

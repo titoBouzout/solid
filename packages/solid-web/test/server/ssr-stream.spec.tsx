@@ -227,7 +227,7 @@ describe("SSR Streaming — Basic Rendering", () => {
       return (
         <div>
           <Loading fallback={<span>Pending</span>}>
-            <Errored fallback={(e: any) => <span>err: {e.message}</span>}>{data().title}</Errored>
+            <Errored fallback={(e: any) => <span>err: {e().message}</span>}>{data().title}</Errored>
           </Loading>
         </div>
       );
@@ -361,7 +361,7 @@ describe("SSR Streaming — Error Handling", () => {
         throw new Error("Boom");
       });
       return (
-        <Errored fallback={(err: Error) => <span>Error: {err.message}</span>}>
+        <Errored fallback={(err: () => Error) => <span>Error: {err().message}</span>}>
           <Loading fallback={<span>Loading...</span>}>
             <p>{data()}</p>
           </Loading>
@@ -381,7 +381,7 @@ describe("SSR Streaming — Error Handling", () => {
         throw new Error("Fail");
       });
       return (
-        <Errored fallback={(err: Error) => <span>Caught</span>}>
+        <Errored fallback={(err: () => Error) => <span>Caught</span>}>
           <Loading fallback={<span>Loading</span>}>
             <p>{data()}</p>
           </Loading>

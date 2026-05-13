@@ -27,7 +27,7 @@ import {
 import type { IQueue, Signal } from "./core/index.js";
 import { emitDiagnostic } from "./core/dev.js";
 import { schedule } from "./core/scheduler.js";
-import { accessor } from "./signals.js";
+import { accessor, type Accessor } from "./signals.js";
 
 export interface BoundaryComputed<T> extends Computed<T> {
   _propagationMask: number;
@@ -257,6 +257,7 @@ export class CollectionQueue extends Queue {
   _tree?: BoundaryComputed<any>;
   _pending = true;
   _disabled: Signal<boolean> = signal(false, { ownedWrite: true, _noSnapshot: true });
+  _error?: Signal<unknown>;
   _collapsed: Signal<boolean> = signal(false, { ownedWrite: true, _noSnapshot: true });
   _revealController?: RevealController;
   _initialized: boolean = false;
@@ -302,6 +303,9 @@ export class CollectionQueue extends Queue {
         const wasEmpty = this._sources.size === 0;
         this._sources.add(source);
         if (wasEmpty) setSignal(this._disabled, true);
+        if (this._collectionType & STATUS_ERROR) {
+          setSignal(this._error!, (source._error as StatusError)?.cause ?? source._error);
+        }
       }
     }
     type &= ~this._collectionType;
@@ -363,6 +367,8 @@ function createCollectionBoundary<T>(
   const owner = createOwner();
   if (_revealUsed) setContext(RevealControllerContext, null, owner);
   const queue = new CollectionQueue(type);
+  if (type === STATUS_ERROR)
+    queue._error = signal<unknown>(undefined, { ownedWrite: true, _noSnapshot: true });
   if (onFn) queue._onFn = onFn;
   const tree = (queue._tree = createBoundChildren(owner, fn, queue, type) as BoundaryComputed<any>);
   // Prime source tracking so reveal registration sees pending sources.
@@ -430,8 +436,8 @@ export function createLoadingBoundary(
 /**
  * Lower-level primitive that backs the `<Errored>` flow control. Catches
  * thrown errors inside `fn` and invokes `fallback(error, reset)` instead.
- * `reset()` recomputes the failing sources so the boundary can attempt to
- * recover.
+ * `error` is an accessor for the latest captured error; `reset()` recomputes
+ * the failing sources so the boundary can attempt to recover.
  *
  * App code should use `<Errored fallback={...}>` instead — reach for this only
  * when authoring custom boundary components.
@@ -439,11 +445,11 @@ export function createLoadingBoundary(
  * @example
  * ```tsx
  * // Custom boundary that wraps the primitive and adds telemetry.
- * function TracedErrored(props: { fallback: (e: unknown) => JSX.Element; children: JSX.Element }) {
+ * function TracedErrored(props: { fallback: (e: () => unknown) => JSX.Element; children: JSX.Element }) {
  *   return createErrorBoundary(
  *     () => props.children,
  *     (err, reset) => {
- *       reportError(err);
+ *       reportError(err());
  *       return props.fallback(err);
  *     }
  *   ) as unknown as JSX.Element;
@@ -452,13 +458,10 @@ export function createLoadingBoundary(
  */
 export function createErrorBoundary<U>(
   fn: () => any,
-  fallback: (error: unknown, reset: () => void) => U
+  fallback: (error: Accessor<unknown>, reset: () => void) => U
 ) {
   return createCollectionBoundary(STATUS_ERROR, fn, queue => {
-    let source = queue._sources!.values().next().value!;
-    // Get the original error from StatusError if wrapped
-    const error = (source._error as StatusError)?.cause ?? source._error;
-    return fallback(error, () => {
+    return fallback(accessor(queue._error!), () => {
       for (const source of queue._sources) recompute(source);
       schedule();
     });

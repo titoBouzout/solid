@@ -80,7 +80,7 @@ describe("Error Boundary Hydration", () => {
       () => {
         const read = createErrorBoundary(
           () => "children content",
-          (err: any) => `fallback: ${err.message}`
+          (err: any) => `fallback: ${err().message}`
         );
         result = read();
       },
@@ -100,7 +100,7 @@ describe("Error Boundary Hydration", () => {
       () => {
         const read = createErrorBoundary(
           () => "children content",
-          (err: any) => `fallback: ${err.message}`
+          (err: any) => `fallback: ${err().message}`
         );
         result = read();
       },
@@ -123,7 +123,7 @@ describe("Error Boundary Hydration", () => {
           () => "recovered content",
           (err: any, reset) => {
             resetFn = reset;
-            return `fallback: ${err.message}`;
+            return `fallback: ${err().message}`;
           }
         );
         result = read();
@@ -152,7 +152,7 @@ describe("Error Boundary Hydration", () => {
       () => {
         const read = createErrorBoundary(
           () => "children content",
-          (err: any) => `fallback: ${err}`
+          (err: any) => `fallback: ${err()}`
         );
         result = read();
       },
@@ -170,7 +170,7 @@ describe("Error Boundary Hydration", () => {
     createRoot(
       () => {
         result = Errored({
-          fallback: (err: any) => `fallback: ${err.message}`,
+          fallback: (err: any) => `fallback: ${err().message}`,
           children: "children content" as any
         });
       },
@@ -191,7 +191,7 @@ describe("Error Boundary Hydration", () => {
     createRoot(
       () => {
         result = Errored({
-          fallback: (err: any) => `fallback: ${err.message}`,
+          fallback: (err: any) => `fallback: ${err().message}`,
           children: "children content" as any
         });
       },
@@ -210,7 +210,7 @@ describe("Error Boundary Hydration", () => {
       () => {
         const read = createErrorBoundary(
           () => "normal content",
-          (err: any) => `fallback: ${err.message}`
+          (err: any) => `fallback: ${err().message}`
         );
         result = read();
       },
@@ -229,7 +229,7 @@ describe("Error Boundary Hydration", () => {
           () => {
             throw new Error("runtime error");
           },
-          (err: any) => `fallback: ${err.message}`
+          (err: any) => `fallback: ${err().message}`
         );
         result = read();
       },
@@ -254,11 +254,11 @@ describe("Error Boundary Hydration", () => {
             // Inner boundary — only created if outer's fn runs
             const innerRead = createErrorBoundary(
               () => "deep content",
-              (err: any) => `inner-fallback: ${err.message}`
+              (err: any) => `inner-fallback: ${err().message}`
             );
             return innerRead();
           },
-          (err: any) => `outer-fallback: ${err.message}`
+          (err: any) => `outer-fallback: ${err().message}`
         );
         result = read();
       },
@@ -281,7 +281,7 @@ describe("Error Boundary Hydration", () => {
 
         const read = createErrorBoundary(
           () => "children",
-          (err: any) => `fallback: ${err.message}`
+          (err: any) => `fallback: ${err().message}`
         );
         boundaryResult = read();
       },
@@ -316,7 +316,7 @@ describe("Error Boundary Hydration", () => {
             fallback: "Item Loading..." as any,
             get children() {
               return Errored({
-                fallback: (e: any) => `ItemError: ${String(e.message || e)}`,
+                fallback: (e: any) => `ItemError: ${String(e().message || e())}`,
                 get children() {
                   return item().title as any;
                 }
@@ -360,7 +360,7 @@ describe("Error Boundary Hydration", () => {
         const item = createMemo(() => rejected);
 
         result = Errored({
-          fallback: (e: any) => `ItemError: ${String(e.message || e)}`,
+          fallback: (e: any) => `ItemError: ${String(e().message || e())}`,
           get children() {
             return Loading({
               fallback: "Item Loading..." as any,
@@ -460,7 +460,7 @@ describe("Error Boundary Hydration", () => {
             return Errored({
               fallback: (e: any, reset) => {
                 resetFn = reset;
-                return `ItemError: ${String(e.message || e)}` as any;
+                return `ItemError: ${String(e().message || e())}` as any;
               },
               get children() {
                 return (id() === "1" ? "Test Item" : "Bad Item") as any;
@@ -2183,7 +2183,7 @@ describe("Snapshot Hydration", () => {
       () => {
         const read = createErrorBoundary(
           () => "success",
-          (err: any) => `error: ${err.message}`
+          (err: any) => `error: ${err().message}`
         );
         result = read;
       },

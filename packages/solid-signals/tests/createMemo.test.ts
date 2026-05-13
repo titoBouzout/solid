@@ -1368,6 +1368,47 @@ describe("async compute", () => {
     expect(latest($x)).toBe(2);
   });
 
+  it("error boundary fallback observes repeated async errors from the same source (#2701)", async () => {
+    const [$count, setCount] = createSignal(0);
+    const requests: ReturnType<typeof deferred<void>>[] = [];
+    let view!: () => string;
+
+    createRoot(() => {
+      const fetchedString = createMemo(async () => {
+        const count = $count();
+        const request = deferred<void>();
+        requests.push(request);
+        await request.promise;
+        throw `Fetch error for ${count}`;
+      });
+
+      view = createErrorBoundary(
+        () =>
+          createLoadingBoundary(
+            () => fetchedString(),
+            () => "loading"
+          )(),
+        e => `error:${e()}`
+      ) as () => string;
+    });
+
+    expect(view()).toBe("loading");
+
+    requests[0].resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    flush();
+    expect(view()).toBe("error:Fetch error for 0");
+
+    setCount(1);
+    flush();
+    requests[1].resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    flush();
+    expect(view()).toBe("error:Fetch error for 1");
+  });
+
   it("isPending sees the first async update for a writable memo signal", async () => {
     const [signal, setSignal] = createSignal<string[]>(() => []);
     let asyncMemo: () => string;

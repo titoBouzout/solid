@@ -10,6 +10,7 @@ import {
   createSignal,
   createMemo,
   Loading,
+  Errored,
   Show,
   Switch,
   Match,
@@ -128,6 +129,74 @@ describe("Testing Loading", () => {
     expect(localDiv.innerHTML).toBe("Bare Data");
 
     localDispose();
+  });
+
+  async function expectRejectedRevalidation(
+    pendingTarget: "count" | "memo",
+    localDiv: HTMLDivElement
+  ) {
+    let increment!: () => void;
+    const requests: Array<{ resolve: () => void }> = [];
+
+    const localDispose = render(() => {
+      const [count, setCount] = createSignal(0);
+      increment = () => setCount(x => x + 1);
+      const fetchedString = createMemo(async () => {
+        const value = count();
+        await new Promise<void>(resolve => requests.push({ resolve }));
+        throw `Fetch error for ${value}`;
+      });
+
+      return (
+        <div
+          style={{
+            opacity: isPending(pendingTarget === "count" ? count : fetchedString) ? 0.5 : 1
+          }}
+        >
+          <span>{count()}</span>
+          <Errored fallback={e => String(e())}>
+            <Loading fallback="loading">
+              <span>{fetchedString()}</span>
+            </Loading>
+          </Errored>
+        </div>
+      );
+    }, localDiv);
+
+    flush();
+    expect(localDiv.firstElementChild!.getAttribute("style")).toBe("opacity: 1;");
+    expect(localDiv.textContent).toBe("0loading");
+
+    requests[0].resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    flush();
+    expect(localDiv.firstElementChild!.getAttribute("style")).toBe("opacity: 1;");
+    expect(localDiv.textContent).toBe("0Fetch error for 0");
+
+    increment();
+    flush();
+    expect(localDiv.firstElementChild!.getAttribute("style")).toBe("opacity: 0.5;");
+    expect(localDiv.textContent).toBe("0Fetch error for 0");
+
+    requests[1].resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    flush();
+    expect(localDiv.firstElementChild!.getAttribute("style")).toBe("opacity: 1;");
+    expect(localDiv.textContent).toBe("1Fetch error for 1");
+
+    localDispose();
+  }
+
+  test("isPending on an upstream signal clears after async rejection (issue #2700)", async () => {
+    const localDiv = document.createElement("div");
+    await expectRejectedRevalidation("count", localDiv);
+  });
+
+  test("Errored shows the latest async error after repeated rejections (issue #2701)", async () => {
+    const localDiv = document.createElement("div");
+    await expectRejectedRevalidation("memo", localDiv);
   });
 
   test("on prop treats component value as the boundary key", async () => {

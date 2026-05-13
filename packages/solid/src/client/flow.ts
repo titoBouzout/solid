@@ -8,6 +8,7 @@ import type { Element as SolidElement } from "../types.js";
 type NonZeroParams<T extends (...args: any[]) => any> = Parameters<T>["length"] extends 0
   ? never
   : T;
+type ErrorAccessor = Accessor<unknown>;
 type ConditionalRenderCallback<T> = (item: Accessor<NonNullable<T>>) => SolidElement;
 type KeyedConditionalRenderCallback<T> = (item: NonNullable<T>) => SolidElement;
 type ConditionalRenderChildren<
@@ -380,7 +381,7 @@ export function Match<T>(props: AnyMatchProps<T>) {
  * @example
  * ```tsx
  * <Errored fallback={(err, reset) => (
- *   <div onClick={reset}>Error: {err.toString()}</div>
+ *   <div onClick={reset}>Error: {err().toString()}</div>
  * )}>
  *   <MyComp />
  * </Errored>
@@ -389,14 +390,14 @@ export function Match<T>(props: AnyMatchProps<T>) {
  * @description https://docs.solidjs.com/reference/components/error-boundary
  */
 export function Errored(props: {
-  fallback: SolidElement | ((err: any, reset: () => void) => SolidElement);
+  fallback: SolidElement | ((err: ErrorAccessor, reset: () => void) => SolidElement);
   children: SolidElement;
 }): SolidElement {
   return createErrorBoundary(
     () => props.children,
-    (err, reset) => {
+    (err: ErrorAccessor, reset) => {
       const f = props.fallback;
-      if (IS_DEV && (typeof f !== "function" || f.length == 0)) console.error(err);
+      if (IS_DEV && (typeof f !== "function" || f.length == 0)) console.error(err());
       return typeof f === "function" && f.length ? f(err, reset) : f;
     }
   ) as unknown as SolidElement;

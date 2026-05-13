@@ -105,7 +105,7 @@ describe("Phase 1: Hydration error diagnostics", () => {
     const html = await renderStreamHtml(() => {
       const item = createMemo(() => rejected);
       return (
-        <Errored fallback={(e: any) => `ItemError: ${String(e.message || e)}`}>
+        <Errored fallback={(e: any) => `ItemError: ${String(e().message || e())}`}>
           <Loading fallback={"Item Loading..."}>{item().title as any}</Loading>
         </Errored>
       );
@@ -117,7 +117,7 @@ describe("Phase 1: Hydration error diagnostics", () => {
     dispose = hydrate(() => {
       const item = createMemo(() => rejected);
       return (
-        <Errored fallback={(e: any) => `ItemError: ${String(e.message || e)}`}>
+        <Errored fallback={(e: any) => `ItemError: ${String(e().message || e())}`}>
           <Loading fallback={"Item Loading..."}>{item().title as any}</Loading>
         </Errored>
       );

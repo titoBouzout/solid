@@ -53,7 +53,7 @@ describe("Testing Errored control flow", () => {
     createRoot(dispose => {
       disposer = dispose;
       <div ref={div}>
-        <Errored fallback={e => e.message}>
+        <Errored fallback={e => e().message}>
           <Component />
         </Errored>
       </div>;
@@ -69,7 +69,7 @@ describe("Testing Errored control flow", () => {
         <Errored
           fallback={(e, reset) => {
             r = reset;
-            return e.message;
+            return e().message;
           }}
         >
           <Component2 />
