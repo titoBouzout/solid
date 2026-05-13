@@ -1,5 +1,16 @@
 # @solidjs/web
 
+## 2.0.0-beta.12
+
+### Patch Changes
+
+- Updated dependencies [b964dc7]
+- Updated dependencies [0a7c278]
+- Updated dependencies [1c5cc7c]
+- Updated dependencies [1833f14]
+- Updated dependencies [12f15a2]
+  - solid-js@2.0.0-beta.12
+
 ## 2.0.0-beta.11
 
 ### Patch Changes

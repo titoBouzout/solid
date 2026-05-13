@@ -1,5 +1,21 @@
 # solid-js
 
+## 2.0.0-beta.12
+
+### Patch Changes
+
+- b964dc7: Bump dom-expressions, babel-plugin-jsx-dom-expressions, hyper-dom-expressions, and sld-dom-expressions to 0.50.0-next.10.
+
+  This includes SSR runtime optimizations for synchronous function holes and plain SSR array resolution, reducing overhead in list-heavy server rendering.
+
+- 0a7c278: Document the mode-specific callback shapes for mapArray and For.
+- 1c5cc7c: Avoid extra strict-read warnings when keyed Show and Match pass raw store-backed values to function children.
+- 1833f14: Fix SSR hydration owner id parity for function-source prop merging and list helpers.
+- 12f15a2: Align control-flow callback values with their keying mode so stable rows receive raw values and index-owned rows receive accessors only where the value can change.
+- Updated dependencies [0a7c278]
+- Updated dependencies [12f15a2]
+  - @solidjs/signals@2.0.0-beta.12
+
 ## 2.0.0-beta.11
 
 ### Patch Changes

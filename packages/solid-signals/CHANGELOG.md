@@ -1,5 +1,12 @@
 # @solidjs/signals
 
+## 2.0.0-beta.12
+
+### Patch Changes
+
+- 0a7c278: Document the mode-specific callback shapes for mapArray and For.
+- 12f15a2: Align control-flow callback values with their keying mode so stable rows receive raw values and index-owned rows receive accessors only where the value can change.
+
 ## 2.0.0-beta.11
 
 ### Patch Changes

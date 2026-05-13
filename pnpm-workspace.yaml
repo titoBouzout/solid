@@ -15,3 +15,5 @@ minimumReleaseAgeExclude:
 overrides:
   babel-preset-solid: workspace:*
   '@solidjs/signals': workspace:*
+  solid-js: workspace:*
+  '@solidjs/web': workspace:*
