@@ -1,5 +1,12 @@
 # @solidjs/signals
 
+## 2.0.0-beta.13
+
+### Patch Changes
+
+- 157dfe2: Pass an error accessor to error boundary fallbacks so repeated async errors from the same captured source update reactively.
+- 4404f9f: Add an opt-in `isPending(fn, true)` render guard mode that lets pending reads follow the Loading path.
+
 ## 2.0.0-beta.12
 
 ### Patch Changes

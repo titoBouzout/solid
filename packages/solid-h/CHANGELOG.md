@@ -1,5 +1,14 @@
 # @solidjs/h
 
+## 2.0.0-beta.13
+
+### Patch Changes
+
+- 6fec663: Remove `on:` namespace event typings and document ref callbacks for native listener options.
+- Updated dependencies [4404f9f]
+- Updated dependencies [6fec663]
+  - @solidjs/web@2.0.0-beta.13
+
 ## 2.0.0-beta.12
 
 ### Patch Changes

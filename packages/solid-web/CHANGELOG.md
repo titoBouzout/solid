@@ -1,5 +1,16 @@
 # @solidjs/web
 
+## 2.0.0-beta.13
+
+### Patch Changes
+
+- 4404f9f: Add an opt-in `isPending(fn, true)` render guard mode that lets pending reads follow the Loading path.
+- 6fec663: Remove `on:` namespace event typings and document ref callbacks for native listener options.
+- Updated dependencies [157dfe2]
+- Updated dependencies [4404f9f]
+- Updated dependencies [6fec663]
+  - solid-js@2.0.0-beta.13
+
 ## 2.0.0-beta.12
 
 ### Patch Changes

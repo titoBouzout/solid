@@ -1,5 +1,15 @@
 # solid-element
 
+## 2.0.0-beta.13
+
+### Patch Changes
+
+- Updated dependencies [157dfe2]
+- Updated dependencies [4404f9f]
+- Updated dependencies [6fec663]
+  - solid-js@2.0.0-beta.13
+  - @solidjs/web@2.0.0-beta.13
+
 ## 2.0.0-beta.12
 
 ### Patch Changes
