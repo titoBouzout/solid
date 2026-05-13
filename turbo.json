@@ -24,7 +24,7 @@
       "outputs": []
     },
     "@solidjs/web#build": {
-      "dependsOn": ["solid-js#types", "@solidjs/web#link"],
+      "dependsOn": ["solid-js#types", "@solidjs/web#link", "@solidjs/web#types"],
       "outputs": ["dist/**", "**/dist/**"]
     },
     "@solidjs/h#link": {

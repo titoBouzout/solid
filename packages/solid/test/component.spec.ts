@@ -152,7 +152,7 @@ describe("Strict Read Warning", () => {
 
     createRoot(() => {
       const [store] = createStore({ error: { type: "network" } as { type: string } | undefined });
-      createComponent(Show, {
+      Show({
         get when() {
           return store.error;
         },
@@ -170,7 +170,7 @@ describe("Strict Read Warning", () => {
 
     createRoot(() => {
       const [store] = createStore({ error: { type: "network" } as { type: string } | undefined });
-      createComponent(Show, {
+      Show({
         get when() {
           return store.error;
         },
@@ -189,7 +189,7 @@ describe("Strict Read Warning", () => {
 
     createRoot(() => {
       const [store] = createStore({ error: { type: "network" } as { type: string } | undefined });
-      createComponent(Switch, {
+      Switch({
         get children() {
           return [
             Match({
@@ -213,7 +213,7 @@ describe("Strict Read Warning", () => {
 
     createRoot(() => {
       const [store] = createStore({ error: { type: "network" } as { type: string } | undefined });
-      createComponent(Switch, {
+      Switch({
         get children() {
           return [
             Match({
