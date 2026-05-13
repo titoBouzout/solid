@@ -37,7 +37,7 @@ This pushes “loading state” to UI structure (boundaries) instead of leaking 
 
 `Loading` shows fallback while the subtree needs unresolved async values.
 
-Importantly, `Loading` is intended to cover **initial readiness**: it handles the first time a subtree attempts to read async-derived values that are not ready yet. After the subtree has produced a value, subsequent revalidation/refresh should generally not “kick you back” into the fallback; use `isPending` for “background work is happening” UI.
+Importantly, `Loading` is intended to cover **branch readiness**: it handles a subtree or newly mounted branch attempting to read async-derived values that are not ready yet. After that branch has produced content, subsequent revalidation/refresh should generally not “kick you back” into the fallback; use `isPending` for “background work is happening” UI.
 
 ```jsx
 <Loading fallback={<Spinner />}>
@@ -69,7 +69,7 @@ This is useful for route-level or key-level transitions where you don't want to 
 
 `isPending` answers: “Does this expression currently have pending async work while also having a usable stale value?”
 
-This means `isPending` is **false during the initial `Loading` fallback** (there is no stale value yet, and the suspended subtree isn’t producing UI). It becomes useful once you’ve rendered at least once and want to show “refreshing…” indicators during revalidation without replacing the whole subtree with a spinner again.
+This means `isPending` is **false on the Loading path** (there is no stale value for that branch yet, and the pending subtree isn’t producing UI). It becomes useful once a branch has rendered content and you want to show “refreshing…” indicators during revalidation without replacing the whole subtree with a spinner again.
 
 ```js
 const users = createMemo(() => fetchUsers());
@@ -88,6 +88,23 @@ return (
 ```
 
 The intent is to replace `.loading`-style flags that belong to a specific primitive (`createResource`) with something that works for any expression.
+
+Render guards sometimes need to read the same async expression they are guarding. Pass `true` as the second argument to let a pending read follow the Loading path instead of being treated as `false`:
+
+```jsx
+<Loading fallback={<button disabled>Loading...</button>}>
+  <button disabled={isPending(user, true)}>Save</button>
+</Loading>
+```
+
+This only works when the expression passed to `isPending` actually reaches the async source (or a value already held by the reactive graph). A separate UI tree that only reads an upstream signal cannot infer that some lower subtree is on the Loading path:
+
+```jsx
+// While a lower subtree is loading this is still false: `id` itself is not pending.
+isPending(id, true);
+```
+
+This is the preferred protection for interactive controls that would otherwise read async data before it is ready: make the control's rendered disabled state read the same async source with `isPending(fn, true)`, and provide a disabled Loading fallback for the Loading path.
 
 ### `latest(fn)` (peek at in-flight values)
 
@@ -147,7 +164,7 @@ Wrap reads of async accessors in `Loading` to control where fallback UI appears.
 
 #### `resource.loading` → `isPending`
 
-In 1.x, `.loading` was a property on the resource itself. In 2.0, loading state is structural (handled by `Loading` boundaries for initial load) and expression-level for revalidation:
+In 1.x, `.loading` was a property on the resource itself. In 2.0, loading state is structural (handled by `Loading` boundaries while a branch is not ready) and expression-level for revalidation:
 
 ```js
 // 1.x
@@ -159,7 +176,7 @@ const user = createMemo(() => fetchUser(id()));
 <Show when={isPending(() => user())}>Refreshing...</Show>
 ```
 
-Remember: `isPending` is **false** during the initial `Loading` fallback (there's no stale value yet). It only becomes true during revalidation.
+Remember: `isPending` is **false** on the Loading path (there's no stale value for that branch yet). It only becomes true during revalidation.
 
 #### `resource.refetch` → `refresh()`
 

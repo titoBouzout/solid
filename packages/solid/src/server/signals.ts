@@ -1554,15 +1554,13 @@ export function resolve<T>(fn: () => T): Promise<T> {
   throw new Error("resolve is not implemented on the server");
 }
 
-export function isPending(fn: () => any, fallback?: boolean): boolean {
+export function isPending(fn: () => any, loading?: boolean): boolean {
   try {
     fn();
     return false;
   } catch (err) {
-    if (err instanceof NotReadyError && arguments.length > 1) {
-      return fallback!;
-    }
-    throw err;
+    if (!(err instanceof NotReadyError) || loading) throw err;
+    return false;
   }
 }
 

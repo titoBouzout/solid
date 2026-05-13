@@ -107,8 +107,9 @@ const data = createMemo(async () => {
   return response.json();
 });
 
-// Check async state
-isPending(data); // true while loading
+// Check async state during revalidation
+isPending(data); // true while stale data is visible and newer data is pending
+isPending(data, true); // follows the Loading path for render guards
 latest(data); // last resolved value
 ```
 
@@ -223,7 +224,7 @@ createRoot(dispose => {
 | ------------------------ | ------------------------------------------------------------------ |
 | `flush()`                | Process all pending updates                                        |
 | `untrack(fn)`            | Run `fn` without tracking dependencies                             |
-| `isPending(accessor)`    | Check if an async accessor is loading                              |
+| `isPending(accessor)`    | Check if an async accessor is revalidating stale data              |
 | `latest(accessor)`       | Get the last resolved value of an async accessor                   |
 | `refresh(accessor)`      | Re-trigger an async computation                                    |
 | `isRefreshing(accessor)` | Check if an async accessor is refreshing                           |

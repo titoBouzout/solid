@@ -84,6 +84,7 @@ export let foundPending = false;
 export let latestReadActive = false;
 export let context: Owner | null = null;
 export let currentOptimisticLane: OptimisticLane | null = null;
+let pendingCheckLoadingPath = false;
 
 export let snapshotCaptureActive = false;
 export let snapshotSources: Set<any> | null = null;
@@ -668,6 +669,18 @@ export function read<T>(el: Signal<T> | Computed<T>): T {
     const firewall = (el as FirewallSignal<any>)._firewall;
     const prevCheck = pendingCheckActive;
     pendingCheckActive = false;
+    const owner = firewall || (el as Computed<any>);
+    if (
+      pendingCheckLoadingPath &&
+      owner._statusFlags & STATUS_PENDING &&
+      owner._statusFlags & STATUS_UNINITIALIZED
+    ) {
+      let c = context;
+      if ((c as Root)?._root) c = (c as Root)._parentComputed;
+      if (c && tracking) link(el, c as Computed<any>);
+      pendingCheckActive = prevCheck;
+      throw owner._error;
+    }
     if (firewall && el._overrideValue !== undefined) {
       if (
         el._overrideValue !== NOT_PENDING &&
@@ -1168,35 +1181,48 @@ export function latest<T>(fn: () => T): T {
 }
 
 /**
- * Returns `true` if any reactive read inside `fn` is currently in a pending
- * (async, not-yet-settled) state. Does not subscribe — pair with a tracked
+ * Returns `true` if any reactive read inside `fn` is showing a stale value
+ * while newer async work is pending. Does not subscribe — pair with a tracked
  * memo if you want to react to pending status changes.
  *
  * Useful for showing inline transition indicators alongside the previous
  * value (rather than swapping to a `<Loading>` fallback).
+ *
+ * Pass `true` as the second argument for render guards that directly read an
+ * async source. If the source is on the Loading path for that read, the
+ * pending read follows that path instead of being treated as `false`.
  *
  * @example
  * ```tsx
  * const pending = createMemo(() => isPending(() => user()));
  *
  * <button disabled={pending()}>{pending() ? "Saving…" : "Save"}</button>
+ *
+ * <Loading fallback={<button disabled>Loading...</button>}>
+ *   <button disabled={isPending(() => user(), true)}>Save</button>
+ * </Loading>
  * ```
  */
-export function isPending(fn: () => any): boolean {
+export function isPending(fn: () => any, loading?: boolean): boolean {
   const prevPendingCheck = pendingCheckActive;
+  const prevPendingCheckLoadingPath = pendingCheckLoadingPath;
   const prevFoundPending = foundPending;
+  const checkLoading = loading === true;
   pendingCheckActive = true;
+  pendingCheckLoadingPath = checkLoading;
   foundPending = false;
   try {
     fn();
     return foundPending;
-  } catch {
+  } catch (e) {
+    if (checkLoading && e instanceof NotReadyError) throw e;
     // When a thunk throws during pending check (e.g., accessing undefined values
     // from uninitialized async memos), return foundPending. The error indicates
     // we're reading from something not yet ready.
     return foundPending;
   } finally {
     pendingCheckActive = prevPendingCheck;
+    pendingCheckLoadingPath = prevPendingCheckLoadingPath;
     foundPending = prevFoundPending;
   }
 }

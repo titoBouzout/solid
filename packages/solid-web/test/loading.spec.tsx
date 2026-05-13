@@ -39,6 +39,26 @@ describe("Testing Basics", () => {
     expect(div.innerHTML).toBe("1");
     disposer();
   });
+
+  test("isPending guard mode lets top-level initial async hold render", async () => {
+    const localDiv = document.createElement("div");
+    let resolveData!: (value: string) => void;
+
+    const disposer = render(() => {
+      const data = createMemo(() => new Promise<string>(r => (resolveData = r)));
+      return <button disabled={isPending(data, true)}>{data()}</button>;
+    }, localDiv);
+
+    expect(localDiv.innerHTML).toBe("");
+
+    resolveData("Ready");
+    await Promise.resolve();
+    await Promise.resolve();
+    flush();
+
+    expect(localDiv.innerHTML).toBe("<button>Ready</button>");
+    disposer();
+  });
 });
 
 describe("Testing Loading", () => {

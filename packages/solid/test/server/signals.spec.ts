@@ -456,6 +456,20 @@ describe("Server utilities", () => {
     expect(isPending(() => 42)).toBe(false);
   });
 
+  test("isPending loading mode propagates NotReadyError", () => {
+    const source = Promise.resolve();
+    expect(() =>
+      isPending(() => {
+        throw new NotReadyError(source);
+      }, true)
+    ).toThrow(NotReadyError);
+    expect(
+      isPending(() => {
+        throw new NotReadyError(source);
+      })
+    ).toBe(false);
+  });
+
   test("latest passes through", () => {
     expect(latest(() => 42)).toBe(42);
   });

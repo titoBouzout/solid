@@ -14,7 +14,7 @@ import {
   Match,
   Errored
 } from "@solidjs/web";
-import { createMemo, createSignal, lazy } from "solid-js";
+import { createMemo, createSignal, isPending, lazy } from "solid-js";
 
 function delay(ms: number) {
   return new Promise(r => setTimeout(r, ms));
@@ -101,6 +101,18 @@ describe("SSR Streaming — No Loading Boundary", () => {
     expect(html).toContain("Resolved");
   });
 
+  test("top-level isPending guard follows Loading path without boundary", async () => {
+    function App() {
+      const data = createMemo(async () => asyncValue("Ready", 20));
+      return <button disabled={isPending(data, true)}>{data()}</button>;
+    }
+
+    const { shell } = await collectChunks(() => <App />);
+    expect(shell).toContain("<button");
+    expect(shell).toContain("Ready");
+    expect(shell).not.toContain("disabled");
+  });
+
   test("async memo above Loading boundary blocks shell, inner streams", async () => {
     function App() {
       const outer = createMemo(async () => asyncValue("Outer", 20));
@@ -168,6 +180,25 @@ describe("SSR Streaming — Basic Rendering", () => {
 
     const html = await renderComplete(() => <App />);
     expect(html).toContain("Loaded Data");
+  });
+
+  test("isPending guard follows Loading path inside Loading boundary", async () => {
+    function App() {
+      const data = createMemo(async () => asyncValue("Ready", 20));
+      return (
+        <Loading fallback={<button disabled>Loading...</button>}>
+          <button disabled={isPending(data, true)}>{data()}</button>
+        </Loading>
+      );
+    }
+
+    const { shell, chunks } = await collectChunks(() => <App />);
+    const full = chunks.join("");
+    expect(shell).toContain("<button");
+    expect(shell).toContain("disabled");
+    expect(shell).toContain("Loading...");
+    expect(full).toContain("<button");
+    expect(full).toContain("Ready");
   });
 
   test("bare async memo as direct Loading child (issue #2677)", async () => {

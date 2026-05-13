@@ -1551,6 +1551,77 @@ describe("async compute", () => {
     expect(a!()).toBe(20);
   });
 
+  it("isPending guard mode participates in Loading during initial async", async () => {
+    const gate = deferred<number>();
+    let a!: () => number;
+    let boundary!: () => unknown;
+
+    createRoot(() => {
+      a = createMemo(() => gate.promise);
+      boundary = createLoadingBoundary(
+        () => (isPending(a, true) ? "pending" : a()),
+        () => "loading"
+      );
+    });
+
+    expect(isPending(a)).toBe(false);
+    expect(boundary()).toBe("loading");
+
+    gate.resolve(1);
+    await Promise.resolve();
+    flush();
+
+    expect(boundary()).toBe(1);
+    expect(isPending(a, true)).toBe(false);
+  });
+
+  it("isPending guard mode stays false for upstream-only initial reads", async () => {
+    const [$id] = createSignal(1);
+    let boundary!: () => unknown;
+
+    createRoot(() => {
+      const a = createMemo(() => Promise.resolve($id() * 10));
+      boundary = createLoadingBoundary(
+        () => a(),
+        () => "loading"
+      );
+    });
+
+    expect(isPending($id, true)).toBe(false);
+    expect(boundary()).toBe("loading");
+
+    await Promise.resolve();
+    flush();
+
+    expect(boundary()).toBe(10);
+    expect(isPending($id, true)).toBe(false);
+  });
+
+  it("isPending guard mode returns true during revalidation", async () => {
+    const [$x, setX] = createSignal(1);
+    let a!: () => number;
+
+    createRoot(() => {
+      a = createMemo(() => Promise.resolve($x() * 10));
+      createRenderEffect(a, () => {});
+    });
+
+    flush();
+    await Promise.resolve();
+    expect(a()).toBe(10);
+    expect(isPending(a, true)).toBe(false);
+
+    setX(2);
+    flush();
+
+    expect(isPending(a, true)).toBe(true);
+    expect(a()).toBe(10);
+
+    await Promise.resolve();
+    expect(a()).toBe(20);
+    expect(isPending(a, true)).toBe(false);
+  });
+
   it("isPending read inside reactive context (memo)", async () => {
     const [$x, setX] = createSignal(1);
     let asyncMemo: () => number;
