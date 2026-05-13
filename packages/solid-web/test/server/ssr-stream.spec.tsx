@@ -361,7 +361,7 @@ describe("SSR Streaming — Error Handling", () => {
         throw new Error("Boom");
       });
       return (
-        <Errored fallback={(err: () => Error) => <span>Error: {err().message}</span>}>
+        <Errored fallback={err => <span>Error: {String(err())}</span>}>
           <Loading fallback={<span>Loading...</span>}>
             <p>{data()}</p>
           </Loading>
@@ -381,7 +381,7 @@ describe("SSR Streaming — Error Handling", () => {
         throw new Error("Fail");
       });
       return (
-        <Errored fallback={(err: () => Error) => <span>Caught</span>}>
+        <Errored fallback={() => <span>Caught</span>}>
           <Loading fallback={<span>Loading</span>}>
             <p>{data()}</p>
           </Loading>

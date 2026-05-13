@@ -10,6 +10,7 @@ DOM behavior in Solid 2.0 follows HTML standards by default: attributes over pro
 
 - **HTML standards:** Supporting multiple ways to set attributes/properties by type makes it harder to build on Solid (e.g. custom elements, SSR). Favoring attributes and lowercase aligns with the platform and removes special cases; `attr:` and `bool:` namespaces are no longer needed.
 - **class:** Merging `classList` into `class` and supporting array/object (clsx-style) reduces API surface and supports composition without extra helpers.
+- **events:** Keeping camelCase event handlers as the only JSX event syntax preserves Solid's delegated event path, while native `addEventListener` options move to ref callbacks where they compose with other DOM directives.
 
 ## Detailed design
 
@@ -19,9 +20,9 @@ DOM behavior in Solid 2.0 follows HTML standards by default: attributes over pro
 - **Lowercasing:** Use HTML lowercase for built-in attribute names (no camelCase for attributes). Exceptions:
   - **Event handlers** remain camelCase (e.g. `onClick`) to keep the `on` modifier clear.
   - **Default to attributes** But attributes such as `input.value`, `input.defaultValue`, `input.checked`, `input.defaultChecked`, `select.value`, `option.value`, `option.selected`, `option.defaultSelected`, `textarea.value`, `textarea.defaultValue`, `video.muted`, `video.defaultMuted`, `audio.muted`, `audio.defaultMuted` continue to be handled as props where that avoids confusion. Unfortunately, this leads to all form fields be special cased. For example: `<input value={dynamicCurrentValue()} defaultValue={dynamicDefaultValue()}/>` either can be dynamic or static, and in the absense of `defaultValue`, then, `value` is SSRed.
-- **Namespaces:** `attr:` and `bool:` namespaces are removed; the single standard behavior makes the model consistent.
+- **Namespaces:** `attr:`, `bool:`, and `on:` namespaces are removed; the single standard behavior makes the model consistent.
 - **XML Namespaces:** `svg` and `math` work as expected, however when using XML partials, an `xmlns` attribute is required for the browser to create the elements with the correct namespace. Solid adds these automatically to the tags that can recognize as SVG/MathML. For example an `a` tag returned from a partial to be used in XML need `xmlns` added by the user.
- 
+
 ### Enhanced class prop
 
 - **`classList` is removed;** its behavior is merged into `class`.
@@ -104,6 +105,15 @@ Used as:
 <button ref={titleDirective(() => props.title)} />
 ```
 
+Native event listener options also belong in user-space ref callbacks:
+
+```jsx
+const on = (type, handler, options) => el => el.addEventListener(type, handler, options);
+
+<button ref={on("click", handleClick, { capture: true })} />
+<button ref={[on("click", logCapture, { capture: true }), on("click", logBubble)]} />
+```
+
 ## Migration / replacement
 
 - **classList:** Use `class` with an object or array instead.
@@ -112,12 +122,12 @@ Used as:
 
 ## Removals
 
-| Removed | Replacement / notes |
-|--------|----------------------|
-| `classList` | Use `class` with object or array |
-| `oncapture:` | Removed; use native `addEventListener` with `{ capture: true }` where needed |
-| `attr:` / `bool:` namespaces | Single attribute/property model above |
-| `use:` directives | Use `ref` callbacks / directive factories (`ref={directive(opts)}`); arrays compose (`ref={[a, b]}`) |
+| Removed                      | Replacement / notes                                                                                          |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `classList`                  | Use `class` with object or array                                                                             |
+| `on:` / `oncapture:`         | Use `onClick` for Solid events; use `ref` callbacks that call `addEventListener` for native listener options |
+| `attr:` / `bool:` namespaces | Single attribute/property model above                                                                        |
+| `use:` directives            | Use `ref` callbacks / directive factories (`ref={directive(opts)}`); arrays compose (`ref={[a, b]}`)         |
 
 ## Alternatives considered
 

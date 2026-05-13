@@ -438,7 +438,15 @@ function titleDirective(source) {
 <some-element enabled="true" />     // when platform requires the string
 ```
 
-Lowercase HTML attribute names. No `attr:` / `bool:` / `oncapture:` namespaces. Event handlers stay camelCase (`onClick`).
+Lowercase HTML attribute names. No `attr:` / `bool:` / `on:` / `oncapture:` namespaces. Event handlers stay camelCase (`onClick`).
+
+For native listener options, use a ref callback:
+
+```jsx
+const on = (type, handler, options) => el => el.addEventListener(type, handler, options);
+
+<button ref={on("click", handleClick, { capture: true })} />;
+```
 
 ### Conditional classes — always use the array/object form
 
@@ -611,7 +619,7 @@ If your training data is 1.x, these are the corrections. **Read this before gene
 | `indexArray`                       | `mapArray` (handles non-keyed too)                                  |
 | `use:foo={x}` directives           | `ref={foo(x)}` (or array `ref={[a, b(x)]}`)                         |
 | `attr:` / `bool:` namespaces       | Standard attribute behavior                                         |
-| `oncapture:`                       | `addEventListener(..., { capture: true })`                          |
+| `on:` / `oncapture:`               | `onClick` for Solid events; ref callbacks for native listener opts  |
 | `resetErrorBoundaries`             | Boundaries heal automatically                                       |
 
 ### Behavior changes

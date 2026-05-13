@@ -30,10 +30,9 @@ import type { Element as SolidElement } from "solid-js";
  *
  * - Event handlers use `camelCase` such `onClick` and will be delegated when possible, bubbling
  *   through the component tree, not the dom tree.
- * - Native event handlers use the namespace `on:` such `on:click`, and wont be delegated. bubbling
- *   the dom tree.
+ * - Event handlers use camelCase attributes; native listener options should be handled with `ref`
+ *   callbacks that call `addEventListener` directly.
  * - A global case-insensitive event handler can be added by extending `EventHandlersElement<T>`
- * - A native `on:` event handler can be added by extending `CustomEvents<T>` interface
  *
  * ## Boolean Attributes (property setter that accepts `true | false`):
  *
@@ -171,17 +170,6 @@ export namespace JSX {
     EHandler extends EventHandler<T, any> = EventHandler<T, E>
   > = EHandler | BoundEventHandler<T, E, EHandler>;
 
-  interface EventHandlerWithOptions<T, E extends Event, EHandler = EventHandler<T, E>>
-    extends AddEventListenerOptions, EventListenerOptions {
-    handleEvent: EHandler;
-  }
-
-  type EventHandlerWithOptionsUnion<
-    T,
-    E extends Event,
-    EHandler extends EventHandler<T, any> = EventHandler<T, E>
-  > = EHandler | EventHandlerWithOptions<T, E, EHandler>;
-
   interface InputEventHandler<T, E extends InputEvent> {
     (
       e: E & {
@@ -253,12 +241,8 @@ export namespace JSX {
     $ServerOnly?: boolean | undefined;
   }
   interface ExplicitProperties {}
-  interface CustomEvents {}
   type PropAttributes = {
     [Key in keyof ExplicitProperties as `prop:${Key}`]?: ExplicitProperties[Key];
-  };
-  type OnAttributes<T> = {
-    [Key in keyof CustomEvents as `on:${Key}`]?: EventHandlerWithOptionsUnion<T, CustomEvents[Key]>;
   };
 
   /**
@@ -723,33 +707,7 @@ export namespace JSX {
     onUnhandledRejection?: EventHandlerUnion<T, PromiseRejectionEvent> | undefined;
     onUnload?: EventHandlerUnion<T, Event> | undefined;
 
-    "on:afterprint"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:beforeprint"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:beforeunload"?: EventHandlerWithOptionsUnion<T, BeforeUnloadEvent> | undefined;
-    "on:devicemotion"?: EventHandlerWithOptionsUnion<T, DeviceMotionEvent> | undefined;
-    "on:deviceorientation"?: EventHandlerWithOptionsUnion<T, DeviceOrientationEvent> | undefined;
-    "on:deviceorientationabsolute"?:
-      | EventHandlerWithOptionsUnion<T, DeviceOrientationEvent>
-      | undefined;
-    "on:gamepadconnected"?: EventHandlerWithOptionsUnion<T, GamepadEvent> | undefined;
-    "on:gamepaddisconnected"?: EventHandlerWithOptionsUnion<T, GamepadEvent> | undefined;
-    "on:hashchange"?: EventHandlerWithOptionsUnion<T, HashChangeEvent> | undefined;
-    "on:languagechange"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:message"?: EventHandlerWithOptionsUnion<T, MessageEvent> | undefined;
-    "on:messageerror"?: EventHandlerWithOptionsUnion<T, MessageEvent> | undefined;
-    "on:offline"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:online"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
     /** @deprecated Use `screen.orientation` (`ScreenOrientation.change`) instead. */
-    "on:orientationchange"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:pagehide"?: EventHandlerWithOptionsUnion<T, PageTransitionEvent> | undefined;
-    "on:pagereveal"?: EventHandlerWithOptionsUnion<T, PageRevealEvent> | undefined;
-    "on:pageshow"?: EventHandlerWithOptionsUnion<T, PageTransitionEvent> | undefined;
-    "on:pageswap"?: EventHandlerWithOptionsUnion<T, PageSwapEvent> | undefined;
-    "on:popstate"?: EventHandlerWithOptionsUnion<T, PopStateEvent> | undefined;
-    "on:rejectionhandled"?: EventHandlerWithOptionsUnion<T, PromiseRejectionEvent> | undefined;
-    "on:storage"?: EventHandlerWithOptionsUnion<T, StorageEvent> | undefined;
-    "on:unhandledrejection"?: EventHandlerWithOptionsUnion<T, PromiseRejectionEvent> | undefined;
-    "on:unload"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
   }
 
   /**
@@ -875,166 +833,22 @@ export namespace JSX {
     onVolumeChange?: EventHandlerUnion<T, Event> | undefined;
     onWaiting?: EventHandlerUnion<T, Event> | undefined;
     onWheel?: EventHandlerUnion<T, WheelEvent> | undefined;
-
-    "on:abort"?: EventHandlerWithOptionsUnion<T, UIEvent> | undefined;
-    "on:animationcancel"?: EventHandlerWithOptionsUnion<T, AnimationEvent> | undefined;
-    "on:animationend"?: EventHandlerWithOptionsUnion<T, AnimationEvent> | undefined;
-    "on:animationiteration"?: EventHandlerWithOptionsUnion<T, AnimationEvent> | undefined;
-    "on:animationstart"?: EventHandlerWithOptionsUnion<T, AnimationEvent> | undefined;
-    "on:auxclick"?: EventHandlerWithOptionsUnion<T, PointerEvent> | undefined;
-    "on:beforecopy"?: EventHandlerWithOptionsUnion<T, ClipboardEvent> | undefined;
-    "on:beforecut"?: EventHandlerWithOptionsUnion<T, ClipboardEvent> | undefined;
-    "on:beforeinput"?:
-      | EventHandlerWithOptionsUnion<T, InputEvent, InputEventHandler<T, InputEvent>>
-      | undefined;
-    "on:beforematch"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:beforepaste"?: EventHandlerWithOptionsUnion<T, ClipboardEvent> | undefined;
-    "on:beforetoggle"?: EventHandlerWithOptionsUnion<T, ToggleEvent> | undefined;
-    "on:beforexrselect"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:blur"?:
-      | EventHandlerWithOptionsUnion<T, FocusEvent, FocusEventHandler<T, FocusEvent>>
-      | undefined;
-    "on:cancel"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:canplay"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:canplaythrough"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:change"?: EventHandlerWithOptionsUnion<T, Event, ChangeEventHandler<T, Event>> | undefined;
-    "on:click"?: EventHandlerWithOptionsUnion<T, MouseEvent> | undefined;
-    "on:close"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:command"?: EventHandlerWithOptionsUnion<T, CommandEvent> | undefined;
-    "on:compositionend"?: EventHandlerWithOptionsUnion<T, CompositionEvent> | undefined;
-    "on:compositionstart"?: EventHandlerWithOptionsUnion<T, CompositionEvent> | undefined;
-    "on:compositionupdate"?: EventHandlerWithOptionsUnion<T, CompositionEvent> | undefined;
-    "on:contentvisibilityautostatechange"?:
-      | EventHandlerWithOptionsUnion<T, ContentVisibilityAutoStateChangeEvent>
-      | undefined;
-    "on:contextlost"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:contextmenu"?: EventHandlerWithOptionsUnion<T, PointerEvent> | undefined;
-    "on:contextrestored"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:copy"?: EventHandlerWithOptionsUnion<T, ClipboardEvent> | undefined;
-    "on:cuechange"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:cut"?: EventHandlerWithOptionsUnion<T, ClipboardEvent> | undefined;
-    "on:dblclick"?: EventHandlerWithOptionsUnion<T, MouseEvent> | undefined;
-    "on:drag"?: EventHandlerWithOptionsUnion<T, DragEvent> | undefined;
-    "on:dragend"?: EventHandlerWithOptionsUnion<T, DragEvent> | undefined;
-    "on:dragenter"?: EventHandlerWithOptionsUnion<T, DragEvent> | undefined;
-    "on:dragexit"?: EventHandlerWithOptionsUnion<T, DragEvent> | undefined;
-    "on:dragleave"?: EventHandlerWithOptionsUnion<T, DragEvent> | undefined;
-    "on:dragover"?: EventHandlerWithOptionsUnion<T, DragEvent> | undefined;
-    "on:dragstart"?: EventHandlerWithOptionsUnion<T, DragEvent> | undefined;
-    "on:drop"?: EventHandlerWithOptionsUnion<T, DragEvent> | undefined;
-    "on:durationchange"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:emptied"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:ended"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:error"?: EventHandlerWithOptionsUnion<T, ErrorEvent> | undefined;
-    "on:focus"?:
-      | EventHandlerWithOptionsUnion<T, FocusEvent, FocusEventHandler<T, FocusEvent>>
-      | undefined;
-    "on:focusin"?:
-      | EventHandlerWithOptionsUnion<T, FocusEvent, FocusEventHandler<T, FocusEvent>>
-      | undefined;
-    "on:focusout"?:
-      | EventHandlerWithOptionsUnion<T, FocusEvent, FocusEventHandler<T, FocusEvent>>
-      | undefined;
-    "on:formdata"?: EventHandlerWithOptionsUnion<T, FormDataEvent> | undefined;
-    "on:fullscreenchange"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:fullscreenerror"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:gotpointercapture"?: EventHandlerWithOptionsUnion<T, PointerEvent> | undefined;
-    "on:input"?:
-      | EventHandlerWithOptionsUnion<T, InputEvent, InputEventHandler<T, InputEvent>>
-      | undefined;
-    "on:invalid"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:keydown"?: EventHandlerWithOptionsUnion<T, KeyboardEvent> | undefined;
-    "on:keypress"?: EventHandlerWithOptionsUnion<T, KeyboardEvent> | undefined;
-    "on:keyup"?: EventHandlerWithOptionsUnion<T, KeyboardEvent> | undefined;
-    "on:load"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:loadeddata"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:loadedmetadata"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:loadstart"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:lostpointercapture"?: EventHandlerWithOptionsUnion<T, PointerEvent> | undefined;
-    "on:mousedown"?: EventHandlerWithOptionsUnion<T, MouseEvent> | undefined;
-    "on:mouseenter"?: EventHandlerWithOptionsUnion<T, MouseEvent> | undefined;
-    "on:mouseleave"?: EventHandlerWithOptionsUnion<T, MouseEvent> | undefined;
-    "on:mousemove"?: EventHandlerWithOptionsUnion<T, MouseEvent> | undefined;
-    "on:mouseout"?: EventHandlerWithOptionsUnion<T, MouseEvent> | undefined;
-    "on:mouseover"?: EventHandlerWithOptionsUnion<T, MouseEvent> | undefined;
-    "on:mouseup"?: EventHandlerWithOptionsUnion<T, MouseEvent> | undefined;
-    "on:paste"?: EventHandlerWithOptionsUnion<T, ClipboardEvent> | undefined;
-    "on:pause"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:play"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:playing"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:pointercancel"?: EventHandlerWithOptionsUnion<T, PointerEvent> | undefined;
-    "on:pointerdown"?: EventHandlerWithOptionsUnion<T, PointerEvent> | undefined;
-    "on:pointerenter"?: EventHandlerWithOptionsUnion<T, PointerEvent> | undefined;
-    "on:pointerleave"?: EventHandlerWithOptionsUnion<T, PointerEvent> | undefined;
-    "on:pointermove"?: EventHandlerWithOptionsUnion<T, PointerEvent> | undefined;
-    "on:pointerout"?: EventHandlerWithOptionsUnion<T, PointerEvent> | undefined;
-    "on:pointerover"?: EventHandlerWithOptionsUnion<T, PointerEvent> | undefined;
-    "on:pointerrawupdate"?: EventHandlerWithOptionsUnion<T, PointerEvent> | undefined;
-    "on:pointerup"?: EventHandlerWithOptionsUnion<T, PointerEvent> | undefined;
-    "on:progress"?: EventHandlerWithOptionsUnion<T, ProgressEvent> | undefined;
-    "on:ratechange"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:reset"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:resize"?: EventHandlerWithOptionsUnion<T, UIEvent> | undefined;
-    "on:scroll"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:scrollend"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:scrollsnapchange"?: EventHandlerWithOptionsUnion<T, SnapEvent> | undefined;
-    "on:scrollsnapchanging"?: EventHandlerWithOptionsUnion<T, SnapEvent> | undefined;
-    "on:securitypolicyviolation"?:
-      | EventHandlerWithOptionsUnion<T, SecurityPolicyViolationEvent>
-      | undefined;
-    "on:seeked"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:seeking"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:select"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:selectionchange"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:selectstart"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:slotchange"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:stalled"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:submit"?: EventHandlerWithOptionsUnion<T, SubmitEvent> | undefined;
-    "on:suspend"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:timeupdate"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:toggle"?: EventHandlerWithOptionsUnion<T, ToggleEvent> | undefined;
-    "on:touchcancel"?: EventHandlerWithOptionsUnion<T, TouchEvent> | undefined;
-    "on:touchend"?: EventHandlerWithOptionsUnion<T, TouchEvent> | undefined;
-    "on:touchmove"?: EventHandlerWithOptionsUnion<T, TouchEvent> | undefined;
-    "on:touchstart"?: EventHandlerWithOptionsUnion<T, TouchEvent> | undefined;
-    "on:transitioncancel"?: EventHandlerWithOptionsUnion<T, TransitionEvent> | undefined;
-    "on:transitionend"?: EventHandlerWithOptionsUnion<T, TransitionEvent> | undefined;
-    "on:transitionrun"?: EventHandlerWithOptionsUnion<T, TransitionEvent> | undefined;
-    "on:transitionstart"?: EventHandlerWithOptionsUnion<T, TransitionEvent> | undefined;
-    "on:volumechange"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:waiting"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-    "on:wheel"?: EventHandlerWithOptionsUnion<T, WheelEvent> | undefined;
   }
 
   // EventName = "click" | "mousedown" ...
 
   type EventName =
     | (keyof EventHandlersWindow<any> extends infer K
-        ? K extends `on:${infer T}`
-          ? T
-          : K extends `on${infer T}`
-            ? Lowercase<T>
-            : never
+        ? K extends `on${infer T}`
+          ? Lowercase<T>
+          : never
         : never)
     | (keyof EventHandlersElement<any> extends infer K
-        ? K extends `on:${infer T}`
-          ? T
-          : K extends `on${infer T}`
-            ? Lowercase<T>
-            : never
+        ? K extends `on${infer T}`
+          ? Lowercase<T>
+          : never
         : never)
     | (string & {});
-
-  type ExtractEventType<T> = {
-    [K in keyof T as K extends `on:${infer Name}`
-      ? Name
-      : never]: T[K] extends EventHandlerWithOptionsUnion<Element, infer E> ? E : never;
-  };
-
-  // EventType["click"] = MouseEvent
-
-  type EventType = ExtractEventType<EventHandlersElement<Element>> &
-    ExtractEventType<EventHandlersWindow<Element>>;
 
   // GLOBAL ATTRIBUTES
 
@@ -1045,12 +859,7 @@ export namespace JSX {
    * 2. Includes `keys` defined by `Element` and `Node` interfaces.
    */
   interface ElementAttributes<T>
-    extends
-      CustomAttributes<T>,
-      PropAttributes,
-      OnAttributes<T>,
-      EventHandlersElement<T>,
-      AriaAttributes {
+    extends CustomAttributes<T>, PropAttributes, EventHandlersElement<T>, AriaAttributes {
     // [key: ClassKeys]: boolean;
 
     // properties
@@ -1719,13 +1528,6 @@ export namespace JSX {
     src?: FunctionMaybe<string | RemoveAttribute>;
 
     onEncrypted?: EventHandlerUnion<T, MediaEncryptedEvent> | undefined;
-    "on:encrypted"?: EventHandlerWithOptionsUnion<T, MediaEncryptedEvent> | undefined;
-
-    onWaitingForKey?: EventHandlerUnion<T, Event> | undefined;
-    "on:waitingforkey"?: EventHandlerWithOptionsUnion<T, Event> | undefined;
-
-    /** @deprecated */
-    mediagroup?: FunctionMaybe<string | RemoveAttribute>;
 
     // special cases locked to properties
 
@@ -2064,14 +1866,6 @@ export namespace JSX {
     width?: FunctionMaybe<number | string | RemoveAttribute>;
 
     onEnterPictureInPicture?: EventHandlerUnion<T, PictureInPictureEvent> | undefined;
-    "on:enterpictureinpicture"?: EventHandlerWithOptionsUnion<T, PictureInPictureEvent> | undefined;
-
-    onLeavePictureInPicture?: EventHandlerUnion<T, PictureInPictureEvent> | undefined;
-    "on:leavepictureinpicture"?: EventHandlerWithOptionsUnion<T, PictureInPictureEvent> | undefined;
-  }
-
-  interface WebViewHTMLAttributes<T> extends HTMLAttributes<T> {
-    allowpopups?: FunctionMaybe<BooleanAttribute | RemoveAttribute>;
     disableblinkfeatures?: FunctionMaybe<string | RemoveAttribute>;
     disablewebsecurity?: FunctionMaybe<BooleanAttribute | RemoveAttribute>;
     enableblinkfeatures?: FunctionMaybe<string | RemoveAttribute>;
@@ -2348,32 +2142,6 @@ export namespace JSX {
   interface AnimationElementSVGAttributes<T>
     extends SVGAttributes<T>, ExternalResourceSVGAttributes, ConditionalProcessingSVGAttributes {
     onBegin?: EventHandlerUnion<T, TimeEvent> | undefined;
-    "on:begin"?: EventHandlerWithOptionsUnion<T, TimeEvent> | undefined;
-
-    onEnd?: EventHandlerUnion<T, TimeEvent> | undefined;
-    "on:end"?: EventHandlerWithOptionsUnion<T, TimeEvent> | undefined;
-
-    onRepeat?: EventHandlerUnion<T, TimeEvent> | undefined;
-    "on:repeat"?: EventHandlerWithOptionsUnion<T, TimeEvent> | undefined;
-  }
-  interface ContainerElementSVGAttributes<T>
-    extends
-      SVGAttributes<T>,
-      ShapeElementSVGAttributes<T>,
-      Pick<
-        PresentationSVGAttributes,
-        | "clip-path"
-        | "mask"
-        | "cursor"
-        | "opacity"
-        | "filter"
-        | "enable-background"
-        | "color-interpolation"
-        | "color-rendering"
-      > {}
-  interface FilterPrimitiveElementSVGAttributes<T>
-    extends SVGAttributes<T>, Pick<PresentationSVGAttributes, "color-interpolation-filters"> {
-    height?: FunctionMaybe<number | string | RemoveAttribute>;
     result?: FunctionMaybe<string | RemoveAttribute>;
     width?: FunctionMaybe<number | string | RemoveAttribute>;
     x?: FunctionMaybe<number | string | RemoveAttribute>;

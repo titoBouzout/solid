@@ -53,12 +53,12 @@ describe("Testing Errored control flow", () => {
     createRoot(dispose => {
       disposer = dispose;
       <div ref={div}>
-        <Errored fallback={e => e().message}>
+        <Errored fallback={e => String(e())}>
           <Component />
         </Errored>
       </div>;
     });
-    expect(div.innerHTML).toBe("Failure");
+    expect(div.innerHTML).toBe("Error: Failure");
   });
 
   test("Create an Error callback and reset", () => {
@@ -69,14 +69,14 @@ describe("Testing Errored control flow", () => {
         <Errored
           fallback={(e, reset) => {
             r = reset;
-            return e().message;
+            return String(e());
           }}
         >
           <Component2 />
         </Errored>
       </div>;
     });
-    expect(div.innerHTML).toBe("Failure");
+    expect(div.innerHTML).toBe("Error: Failure");
     flush();
 
     r!();

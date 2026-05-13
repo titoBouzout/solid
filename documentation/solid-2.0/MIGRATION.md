@@ -531,7 +531,7 @@ Solid 2.0 aims to be more “what you write is what the platform sees”:
 
 - built-in attributes are treated as **attributes** (not magically mapped properties), and are generally **lowercase**
 - boolean attributes are presence/absence (`muted={true}` adds it, `muted={false}` removes it)
-- `attr:` and `bool:` namespaces are removed (you typically don’t need them)
+- `attr:`, `bool:`, and `on:` namespaces are removed (you typically don’t need them)
 
 ```jsx
 <video muted={true} />
@@ -541,7 +541,13 @@ Solid 2.0 aims to be more “what you write is what the platform sees”:
 <some-element enabled="true" />
 ```
 
-Also, `oncapture:` is removed.
+`on:` and `oncapture:` are removed. Keep using camelCase event handlers like `onClick` for Solid-managed events. For native listener options, use a ref callback:
+
+```jsx
+const on = (type, handler, options) => el => el.addEventListener(type, handler, options);
+
+<button ref={on("click", handleClick, { capture: true })} />;
+```
 
 ### Directives: `use:` → `ref` directive factories (two-phase pattern)
 
@@ -932,6 +938,6 @@ If you need a standard Observable/AsyncIterable interface for external consumers
 - **`writeSignal`** → removed (internal API that should not have been exported)
 - **`use:` directives** → `ref` directive factories
 - **`attr:` / `bool:` namespaces** → standard attribute behavior
-- **`oncapture:`** → removed
+- **`on:` / `oncapture:`** → `onClick` for Solid events; ref callbacks for native listener options
 - **`Context.Provider`** → use the context directly as provider (`<Context value={...}>`)
 - **`solid-js/jsx-runtime` / `solid-js/jsx-dev-runtime`** → renderer runtime entries such as `@solidjs/web/jsx-runtime`
