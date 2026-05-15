@@ -127,7 +127,7 @@ const initialValue = createMemo(() => untrack(() => props.value ));
 
 <input defaultValue={initialValue()} />
 
-// 2.0: for stores, a non-tracking memo with a snapshot could be used
+// 2.0: for stores/objects, a non-tracking memo with a snapshot/structureClone could be used
 const initialSize = createMemo(() => untrack(() => snapshot(props.size) ));
 
 <ColorPicker size={initialSize()} /> // {width, height}
@@ -139,7 +139,7 @@ const initialSize = createMemo(() => untrack(() => snapshot(props.size) ));
 - **classList:** Use `class` with an object or array instead.
 - **Attributes:** Use lowercase attribute names; use string `"true"` only where the platform requires it.
 - **Directives:** Replace `use:foo={...}` with `ref={foo(...)}` (or `ref={foo}` when no options are needed). Use an array when you need multiple directives/refs.
-- **@once:** Use `createMemo` with `untrack`
+- **@once:** Use `createMemo` with `untrack`. For stores use `snapshot`, for plain objects use `structureClone`
 
 ## Removals
 
@@ -149,7 +149,7 @@ const initialSize = createMemo(() => untrack(() => snapshot(props.size) ));
 | `on:` / `oncapture:`         | Use `onClick` for Solid events; use `ref` callbacks that call `addEventListener` for native listener options |
 | `attr:` / `bool:` namespaces | Single attribute/property model above                                                                        |
 | `use:` directives            | Use `ref` callbacks / directive factories (`ref={directive(opts)}`); arrays compose (`ref={[a, b]}`)         |
-| `@once` marker            | Use `createMemo` with `untrack`          |
+| `@once` marker            | Use `createMemo` with `untrack`. For stores use `snapshot`, for plain objects use `structureClone`          |
 
 ## Alternatives considered
 
