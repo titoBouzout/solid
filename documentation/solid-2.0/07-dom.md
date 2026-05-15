@@ -114,11 +114,32 @@ const on = (type, handler, options) => el => el.addEventListener(type, handler, 
 <button ref={[on("click", logCapture, { capture: true }), on("click", logBubble)]} />
 ```
 
+### Initial/Default values handling (and removal of `@once`)
+
+Solid 2.0 removes the `@once` static marker that used to avoid wrapping attributes/properties in effects.
+
+```jsx
+// 1.x: `@once` static marker
+<input value={/* @once */ prop.value} />
+
+// 2.0: non-tracking memo that reads at the right place
+const initialValue = createMemo(() => untrack(() => props.value ));
+
+<input defaultValue={initialValue()} />
+
+// 2.0: for stores, a non-tracking structued clone memo could be used
+const initialSize = createMemo(() => untrack(() => snapshot(props.size) ));
+
+<ColorPicker size={initialSize()} /> // {width, height}
+
+```
+
 ## Migration / replacement
 
 - **classList:** Use `class` with an object or array instead.
 - **Attributes:** Use lowercase attribute names; use string `"true"` only where the platform requires it.
 - **Directives:** Replace `use:foo={...}` with `ref={foo(...)}` (or `ref={foo}` when no options are needed). Use an array when you need multiple directives/refs.
+- **@once:** Use `createMemo` with `untrack`
 
 ## Removals
 
@@ -128,6 +149,7 @@ const on = (type, handler, options) => el => el.addEventListener(type, handler, 
 | `on:` / `oncapture:`         | Use `onClick` for Solid events; use `ref` callbacks that call `addEventListener` for native listener options |
 | `attr:` / `bool:` namespaces | Single attribute/property model above                                                                        |
 | `use:` directives            | Use `ref` callbacks / directive factories (`ref={directive(opts)}`); arrays compose (`ref={[a, b]}`)         |
+| `@once` marker            | Use `createMemo` with `untrack` (`ref={directive(opts)}`);          |
 
 ## Alternatives considered
 
